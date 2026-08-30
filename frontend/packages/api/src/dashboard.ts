@@ -255,6 +255,35 @@ export interface DashboardRiskSignalItem extends StrategySignalItem {
   risk_flags?: string[]
 }
 
+/** 数据源健康(后端 src/core/data_source_health): 首页"主力动向"区块指示灯数据。
+ *  后端异常时给兜底值, 字段全部可选、宽松。 */
+export interface DataSourceHealth {
+  /** TQ JSON-RPC 是否在线 */
+  tq_online?: boolean
+  /** 数据是否为最近交易日(开盘前/休市 Now==0 属正常, 以 HqDate 为准) */
+  data_is_today?: boolean
+  /** 快照实时价(可能为 0/None) */
+  last_price?: number | null
+  /** 行情日期(如 20260828) */
+  hq_date?: string
+  checked_at?: string
+  tq_url?: string
+}
+
+/** 主力动向条目: 单只自选股的主力意图 + 暗盘资金(后端 compute_dark_flow 摘要)。 */
+export interface DashboardMainForceItem {
+  code?: string
+  name?: string
+  /** 主力意图文本(来自 compute_dark_flow.signal) */
+  intent?: string
+  /** 暗盘净额(元, 全量主动净额) */
+  dark_net?: number | null
+  /** 主力净额(元, ≥20万腾讯官方口径) */
+  main_net?: number | null
+  /** 数据状态: ok / insufficient(逐笔不足) / suspect(疑重复计数) */
+  data_status?: string
+}
+
 export interface DashboardOverviewResponse {
   generated_at: string
   market: 'ALL' | 'CN' | 'HK' | 'US'
@@ -303,6 +332,10 @@ export interface DashboardOverviewResponse {
     top_by_strategy: Array<Record<string, any>>
   }
   insights: DashboardInsightItem[]
+  /** 数据源健康指示灯(可选: 老后端/降级时可能缺失) */
+  data_source_health?: DataSourceHealth | null
+  /** 自选股主力动向(暗盘资金, 最多 8 只; 降级时为空数组/缺失) */
+  main_force?: DashboardMainForceItem[] | null
 }
 
 export const dashboardApi = {

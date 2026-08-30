@@ -111,6 +111,84 @@ def _summarize_topics(raw_topics) -> list[dict]:
     return out
 
 
+# ── P1-1: 数据源健康 + 主力动向(首页新增区块, 2026-08-30 事故后补显式可见性)──
+# 设计原则: 全部优雅降级。任一步失败返回兜底结构, 绝不让 overview 500。
+_MAIN_FORCE_LIMIT = 8       # 最多取前 8 只自选股算暗盘(腾讯逐笔走网络, 限制耗时上界)
+_MAIN_FORCE_BUDGET_S = 20.0  # 整块软时间预算(秒): 超时即停止继续算后续股, 不阻塞 overview
+
+
+def _data_source_health_block() -> dict:
+    """数据源健康指示灯数据(复用 src/core/data_source_health, 永不抛异常)。"""
+    try:
+        from src.core.data_source_health import data_source_health
+
+        health = data_source_health()
+        if isinstance(health, dict):
+            return health
+    except Exception as e:
+        logger.debug(f"data_source_health 获取失败: {e}")
+    return {"tq_online": False, "data_is_today": False, "last_price": None, "hq_date": ""}
+
+
+def _main_force_items(db: Session, user) -> list[dict]:
+    """自选股主力动向: 前 _MAIN_FORCE_LIMIT 只 CN 自选股逐只 compute_dark_flow。
+
+    降级策略(三层):
+    1. 单只异常 → 跳过该股, 继续下一只(腾讯逐笔走网络, 单股失败常见);
+    2. 单只返回 None(无逐笔/非A股代码) → 跳过;
+    3. 整块任意异常(含 import 失败) → 返回 []。
+    另设软时间预算: 超过 _MAIN_FORCE_BUDGET_S 即停止, 不让慢网络拖垮整个 overview。
+    """
+    try:
+        import time as _time
+
+        from marketdata import Symbol as MDSymbol
+        from src.core.dark_flow import compute_dark_flow
+
+        user_id = getattr(user, "id", None)
+        if not user_id:
+            return []
+        # 复用 stocks.list_stocks 的自选口径: 本人 + 全局(user_id=NULL), sort_order 排序
+        stocks = (
+            db.query(Stock)
+            .filter(or_(Stock.user_id == user_id, Stock.user_id.is_(None)))
+            .order_by(Stock.sort_order.asc(), Stock.id.asc())
+            .all()
+        )
+        items: list[dict] = []
+        t0 = _time.monotonic()
+        for s in stocks:
+            if len(items) >= _MAIN_FORCE_LIMIT:
+                break
+            if _time.monotonic() - t0 > _MAIN_FORCE_BUDGET_S:
+                logger.warning("main-force 块超软时间预算, 提前停止(已算 %d 只)", len(items))
+                break
+            code = (s.symbol or "").strip()
+            if (s.market or "CN").strip().upper() != "CN" or not (code.isdigit() and len(code) == 6):
+                continue  # 暗盘/主力意图仅支持 6 位 A 股代码
+            try:
+                dark = compute_dark_flow(MDSymbol.parse(code, "CN"))
+            except Exception as e:
+                logger.debug(f"main-force compute_dark_flow 失败 {code}: {e}")
+                continue
+            if not isinstance(dark, dict):
+                continue  # 无逐笔数据/非交易时段 → 跳过
+            items.append(
+                {
+                    "code": code,
+                    "name": s.name or code,
+                    "intent": dark.get("signal") or "",   # 主力意图文本(_judge_signal)
+                    "dark_net": dark.get("dark_net"),     # 暗盘净额(元, 全量主动净额)
+                    "main_net": dark.get("main_net"),     # 主力净额(元, ≥20万腾讯口径)
+                    "data_status": dark.get("data_status") or "ok",  # ok/insufficient/suspect
+                }
+            )
+        return items
+    except Exception as e:
+        logger.debug(f"main-force 块整体失败: {e}")
+        return []
+
+
 def _load_latest_insights(db: Session, user: User | None = None) -> list[dict]:
     """各 agent 最新报告卡片。
 
@@ -401,6 +479,9 @@ def get_dashboard_overview(
             "top_by_strategy": top_strategy_rows,
         },
         "insights": _load_latest_insights(db, user=user),
+        # P1-1: 数据源健康指示灯 + 自选股主力动向(均优雅降级, 绝不 500)
+        "data_source_health": _data_source_health_block(),
+        "main_force": _main_force_items(db, user),
     }
 
 

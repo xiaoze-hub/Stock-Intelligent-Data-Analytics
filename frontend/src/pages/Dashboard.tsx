@@ -79,6 +79,16 @@ function moveColor(v?: number | null): string {
   if (v == null) return 'text-muted-foreground'
   return v > 0 ? 'text-stock-up' : v < 0 ? 'text-stock-down' : 'text-muted-foreground'
 }
+/** 金额(元) → +1,234万 / -3.45亿 紧凑展示;null/非数 → '--'。供主力动向暗盘净额用。 */
+function formatYuan(v: unknown): string {
+  const n = safeNum(v)
+  if (n == null) return '--'
+  const sign = n >= 0 ? '+' : ''
+  const abs = Math.abs(n)
+  if (abs >= 1e8) return `${sign}${(n / 1e8).toFixed(2)}亿`
+  if (abs >= 1e4) return `${sign}${(n / 1e4).toFixed(0)}万`
+  return `${sign}${Math.round(n)}`
+}
 /** 涨跌着色 chip 的背景+文字类;null/平盘 → 灰底。红涨绿跌(A股口径)。 */
 function pctChipCls(v?: number | null): string {
   if (v == null) return 'bg-accent text-muted-foreground'
@@ -147,6 +157,13 @@ const MARKET_BAR_CLS: Record<string, string> = {
   CN: 'bg-primary',
   US: 'bg-emerald-500',
   HK: 'bg-orange-500',
+}
+
+// 数据源健康指示灯(主力动向区块, P1-1): 绿=实时(在线+数据今日) / 黄=休市(在线但数据非今日) / 红=离线
+const HEALTH_META: Record<'ok' | 'stale' | 'down', { dot: string; label: string }> = {
+  ok: { dot: 'bg-green-500', label: '数据源: 实时' },
+  stale: { dot: 'bg-amber-500', label: '数据源: 休市' },
+  down: { dot: 'bg-red-500', label: '数据源: 离线' },
 }
 
 export default function DashboardPage() {
@@ -393,6 +410,14 @@ export default function DashboardPage() {
     const list = overview?.action_center?.opportunities?.length ? overview.action_center.opportunities : oppFallback
     return list.slice(0, 5)
   }, [overview, oppFallback])
+
+  // 主力动向(P1-1): 自选股暗盘资金摘要; 后端降级/无自选股时为空数组 → 区块不渲染
+  const mainForce = useMemo(() => overview?.main_force || [], [overview])
+  const healthState: 'ok' | 'stale' | 'down' = !overview?.data_source_health?.tq_online
+    ? 'down'
+    : overview.data_source_health.data_is_today
+      ? 'ok'
+      : 'stale'
 
   // 今日必读候选(多源)→ 交 AI 策展(失败兜底原序)
   const candidates = useMemo<CurateCandidate[]>(() => {
@@ -910,6 +935,56 @@ export default function DashboardPage() {
         <div className="lg:col-span-12 xl:col-span-6">
           <DiscoveryPanel monitorStocks={scan} onOpenStock={openStock} />
         </div>
+
+        {/* 主力动向(P1-1): 数据源健康指示灯 + 自选股暗盘资金卡片网格。
+            首载骨架; 空数组/后端降级缺失 → 不渲染(不占位) */}
+        {loading && !overview ? (
+          <div className="card p-4 lg:col-span-12">
+            <div className="mb-2 flex items-center gap-2">
+              <h2 className="text-sm font-semibold">主力动向</h2>
+              <span className="text-[11px] text-muted-foreground">暗盘资金 · 主力意图</span>
+            </div>
+            <SkeletonRows rows={2} />
+          </div>
+        ) : mainForce.length > 0 ? (
+          <div className="card p-4 lg:col-span-12">
+            <div className="mb-2 flex items-center gap-2">
+              <h2 className="text-sm font-semibold">主力动向</h2>
+              <span className="text-[11px] text-muted-foreground">暗盘资金 · 自选股前 8 只</span>
+              <span
+                className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                title={`TQ 在线: ${overview?.data_source_health?.tq_online ? '是' : '否'} · 行情数据日期: ${overview?.data_source_health?.hq_date || '--'}`}
+              >
+                <span className={`h-2 w-2 rounded-full ${HEALTH_META[healthState].dot}`} />
+                {HEALTH_META[healthState].label}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {mainForce.map((m) => (
+                <button
+                  key={m.code || m.name}
+                  type="button"
+                  onClick={() => m.code && openStock(m.code, 'CN', m.name || '')}
+                  className="rounded-lg border border-border/50 bg-accent/10 p-2.5 text-left transition-colors hover:border-primary/40"
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="truncate text-[13px] font-medium">{m.name || m.code || '--'}</span>
+                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{m.code}</span>
+                  </div>
+                  <div className="mt-1 flex items-baseline justify-between gap-1">
+                    <span className="text-[10px] text-muted-foreground">暗盘净额</span>
+                    <span className={`font-num text-[14px] font-semibold tabular-nums ${moveColor(safeNum(m.dark_net))}`}>
+                      {formatYuan(m.dark_net)}
+                    </span>
+                  </div>
+                  <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground">
+                    {m.intent || (m.data_status === 'insufficient' ? '逐笔数据不足, 暂不判定意图' : '暂无意图信号')}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* 情绪周期6阶段 + 主线识别(TSP 口径): C 位主区 */}

@@ -113,6 +113,11 @@ services:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
       - DOCKER=1
+      # 小主机部署: 直连 Windows 通达信 TQ 网关; 缺省 host.docker.internal
+      # (extra_hosts 映射到宿主机), 也可显式指定 WSL 网关 IP 如 http://172.27.16.1:17709/
+      - TDX_QUANT_URL=${TDX_QUANT_URL:-http://host.docker.internal:17709/}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - panwatch_data:/app/data
       # 可选: Hermes cron 输出(报告中心读取 cron 报告用)

@@ -1,7 +1,8 @@
-"""通达信TQ行情 vendor(本机网关 http://127.0.0.1:5100, JSON-RPC)。
+"""通达信TQ行情 vendor(JSON-RPC), 地址由 TDX_QUANT_URL 环境变量指定。
 
-链路: PanWatch(容器, host网络可达宿主127.0.0.1:5100) → frps(云7100/5100)
-      → 小主机frpc → 通达信客户端自带TQ HTTP服务(127.0.0.1:17709)。
+链路(小主机): PanWatch(WSL 容器) → WSL 网关(如 172.27.16.1:17709)
+      → Windows 通达信客户端自带 TQ HTTP 服务(127.0.0.1:17709)。
+链路(云生产旧): PanWatch → frps(5100) → 小主机 frpc → 通达信 TQ(17709)。
 
 实测延迟(上海生产机): 快照/扩展指标 ~27-30ms, K线(10只×250日) ~48ms,
 并发10路单次中位67ms — 全部远优于腾讯/东财 HTTP 爬源。
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -23,7 +25,9 @@ from marketdata.vendors.base import KlineVendor, MoreInfoVendor, QuoteVendor
 
 logger = logging.getLogger(__name__)
 
-_TQ_URL = "http://172.18.0.1:5100/"  # 容器内宿主网关(panwatch-net); 宿主本机为 127.0.0.1:5100
+# 小主机部署: 容器经 WSL 网关直连 Windows 通达信 TQ (17709);
+# 云生产旧链路(frps 5100)作为缺省回退, 部署侧用 TDX_QUANT_URL 覆盖。
+_TQ_URL = os.environ.get("TDX_QUANT_URL", "http://172.18.0.1:5100/")
 _TIMEOUT_S = 4.0  # 正常 <100ms; 隧道断开时快速失败交给降级链
 
 

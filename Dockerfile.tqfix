@@ -1,0 +1,9 @@
+# SIDA 小主机部署补丁镜像 (v0.4.18 基线)
+#  1) tq.py: TQ 网关地址改由 TDX_QUANT_URL 环境变量指定 (commit b1c0558)
+#  2) migrations.py: Hermes 2026-08-30 生产热修集(24 个 SQLite-only 迁移在 PG 上
+#     置为 no-op, 见 deploy/pg-hotfix/README.md)。checksum 与生产 DB
+#     schema_migrations 一致, 保证冷启动不再触发 108 等迁移崩溃。
+# 正式修复(24 个迁移 PG 方言化)属下一版镜像工作, 勿与本文件混淆。
+FROM ghcr.io/xiaoze-hub/stock-intelligent-data-analytics:latest
+COPY packages/marketdata/src/marketdata/vendors/tq.py /app/packages/marketdata/src/marketdata/vendors/tq.py
+COPY deploy/pg-hotfix/migrations.py /app/src/web/migrations.py
