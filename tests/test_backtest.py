@@ -144,3 +144,21 @@ def test_engine_target_capped_at_limit():
     sig = Signal("600519", "CN", "2026-01-01", stop_loss=9.0, target_price=12.0, holding_days=10)
     t = Backtester().run_single(sig, bars)
     assert t is not None and t.exit_reason != "target"
+
+
+# ──────────────── outcome可执行基准(2026-09-10, S2) ────────────────
+
+def test_pick_open_after_uses_next_session():
+    """基准取快照日后首个交易日开盘(与回测入场一致),而非信号日价格。"""
+    from datetime import date
+    from types import SimpleNamespace
+    from src.core.strategy_engine import _pick_open_after
+
+    klines = [
+        SimpleNamespace(date="2026-01-02", open=10.0, close=10.5),
+        SimpleNamespace(date="2026-01-05", open=10.8, close=11.0),
+        SimpleNamespace(date="2026-01-06", open=11.2, close=11.5),
+    ]
+    assert _pick_open_after(klines, date(2026, 1, 2)) == 10.8
+    assert _pick_open_after(klines, date(2026, 1, 6)) is None
+    assert _pick_open_after([], date(2026, 1, 2)) is None

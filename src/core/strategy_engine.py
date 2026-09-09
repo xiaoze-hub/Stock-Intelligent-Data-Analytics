@@ -272,6 +272,35 @@ def _pick_close_on_or_before(klines: list, target: date) -> float | None:
     return None
 
 
+def _pick_open_after(klines: list, snap_day: date) -> float | None:
+    """快照日之后首个交易日的开盘价(可执行基准,与回测入场口径一致)。
+
+    outcome 基准必须用能成交的价格: 信号日当天的 entry_low/high、
+    盘中 quote 都是事后看得见、事前买不到的。用次日开盘对齐
+    backtest.engine.run_single 的入场价, 消掉一天漂移虚盈。
+    无次日数据返回 None(调用方走旧降级链并标记 base_kind)。
+    """
+    if not klines:
+        return None
+    rows: list[tuple[date, float]] = []
+    for k in klines:
+        d = _parse_day(getattr(k, "date", None))
+        o = getattr(k, "open", None)
+        if d is None or o is None:
+            continue
+        try:
+            rows.append((d, float(o)))
+        except Exception:
+            continue
+    if not rows:
+        return None
+    rows.sort(key=lambda x: x[0])
+    for d, o in rows:
+        if d > snap_day:
+            return o
+    return None
+
+
 def _strategy_codes_for_candidate(row: EntryCandidate) -> list[str]:
     tags = [str(x).strip() for x in (row.strategy_tags or []) if str(x).strip()]
     codes: list[str] = []
@@ -1698,13 +1727,15 @@ def evaluate_strategy_outcomes(
                 if outcome_price is None:
                     stats["skipped_no_price"] += 1
                     continue
-                base_price = None
-                if s.entry_low is not None and s.entry_high is not None:
-                    base_price = (float(s.entry_low) + float(s.entry_high)) / 2
-                elif s.entry_high is not None:
-                    base_price = float(s.entry_high)
-                elif s.entry_low is not None:
-                    base_price = float(s.entry_low)
+                base_price = _pick_open_after(klines, snap_day)
+                base_kind = "next_open" if base_price else ""
+                if base_price is None:
+                    if s.entry_low is not None and s.entry_high is not None:
+                        base_price = (float(s.entry_low) + float(s.entry_high)) / 2
+                    elif s.entry_high is not None:
+                        base_price = float(s.entry_high)
+                    elif s.entry_low is not None:
+                        base_price = float(s.entry_low)
                 if base_price is None:
                     payload = s.payload if isinstance(s.payload, dict) else {}
                     source_meta = payload.get("source_meta") if isinstance(payload.get("source_meta"), dict) else {}
@@ -1712,6 +1743,8 @@ def evaluate_strategy_outcomes(
                     base_price = _safe_float(quote.get("current_price"))
                 if base_price is None:
                     base_price = _pick_close_on_or_before(klines, snap_day)
+                if base_kind == "" and base_price is not None:
+                    base_kind = "signal_px"
                 if base_price is None or base_price <= 0:
                     stats["skipped_no_base_price"] += 1
                     status = "no_base_price"
@@ -1755,6 +1788,7 @@ def evaluate_strategy_outcomes(
                                 "rank_score": float(s.rank_score or 0),
                                 "action": s.action or "",
                                 "action_label": s.action_label or "",
+                                "base_kind": base_kind if status != "no_base_price" else "",
                             }
                         ),
                         evaluated_at=utc_now(),
