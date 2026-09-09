@@ -61,6 +61,15 @@ export interface MinuteSwings {
   summary?: { n_rallies?: number; n_dips?: number; true_rallies?: number; true_dips?: number; main_net_total?: number }
 }
 
+/** K线叠加层(M5, 2026-09-10): 后端 /quotes/{symbol}/overlays, 持仓成本线/买卖点/除权标记 */
+export interface KlineOverlays {
+  symbol: string
+  market: string
+  cost_lines: Array<{ price: number; label: string; kind: string }>
+  trade_markers: Array<{ date: string; side: string; price: number; label: string }>
+  ex_marks: Array<{ date: string; label: string }>
+}
+
 type MinuteResponse = {
   symbol: string
   market: string
@@ -247,6 +256,8 @@ export default function InteractiveKline(props: {
   const [lwReady] = useState(true)
   // 主力意图结构化数据(2026-08-12): 组件自取 summary API, 用于K线 markers/筹码叠加
   const [mainIntentData, setMainIntentData] = useState<MainIntentStructured | null>(null)
+  // K线叠加层(M5): 持仓成本线/买卖点/除权标记, 失败静默(无持仓无除权时后端给空数组)
+  const [overlays, setOverlays] = useState<KlineOverlays | null>(null)
   const [interval, setIntervalValue] = useState<'1d' | '1w' | '1m'>(props.initialInterval || '1d')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>('')
@@ -322,6 +333,24 @@ export default function InteractiveKline(props: {
       })
       .catch(() => {
         if (!cancelled) setMainIntentData(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [props.symbol, props.market])
+
+  // 拉取K线叠加层(M5, 2026-09-10): 持仓成本线/买卖点/除权标记, 失败静默
+  useEffect(() => {
+    if (!props.symbol) return
+    let cancelled = false
+    fetchAPI<KlineOverlays>(
+      `/quotes/${encodeURIComponent(props.symbol)}/overlays?market=${encodeURIComponent(props.market)}`
+    )
+      .then((res: KlineOverlays) => {
+        if (!cancelled) setOverlays(res)
+      })
+      .catch(() => {
+        if (!cancelled) setOverlays(null)
       })
     return () => {
       cancelled = true
@@ -648,6 +677,60 @@ export default function InteractiveKline(props: {
       }
     }
 
+    // 持仓/买卖点/除权叠加 (M5, 2026-09-10): markers 限 K线范围内, 非法日期跳过
+    if (overlays && series.klines.length) {
+      const firstDate = series.klines[0].date
+      const lastDate = series.klines[series.klines.length - 1].date
+      const omarkers: SeriesMarker<Time>[] = []
+      for (const m of overlays.trade_markers || []) {
+        if (!m.date || m.date < firstDate || m.date > lastDate) continue
+        const t = parseBusinessDay(m.date)
+        if (!t) continue
+        const isBuy = m.side !== 'sell'
+        omarkers.push({
+          time: t,
+          position: isBuy ? 'belowBar' : 'aboveBar',
+          color: isBuy ? '#ef4444' : '#10b981',
+          shape: isBuy ? 'arrowUp' : 'arrowDown',
+          text: m.label || (isBuy ? '买入' : '卖出'),
+          size: 1,
+        })
+      }
+      for (const e of overlays.ex_marks || []) {
+        if (!e.date || e.date < firstDate || e.date > lastDate) continue
+        const t = parseBusinessDay(e.date)
+        if (!t) continue
+        omarkers.push({
+          time: t,
+          position: 'aboveBar',
+          color: '#3b82f6',
+          shape: 'circle',
+          text: e.label || '除权',
+          size: 0,
+        })
+      }
+      if (omarkers.length) {
+        // v5 允许多个 markers 实例共存, 与主力意图 markers 不冲突
+        createSeriesMarkers(candleSeries, omarkers)
+      }
+      for (const l of overlays.cost_lines || []) {
+        if (typeof l.price !== 'number' || !isFinite(l.price)) continue
+        candleSeries.createPriceLine?.({
+          price: l.price,
+          color:
+            l.kind === 'stop'
+              ? 'rgba(16, 185, 129, 0.65)'
+              : l.kind === 'target'
+                ? 'rgba(59, 130, 246, 0.65)'
+                : 'rgba(239, 68, 68, 0.65)',
+          lineWidth: 1,
+          lineStyle: 2,
+          title: l.label,
+          axisLabelVisible: true,
+        })
+      }
+    }
+
     // v5 多面板共用 X 轴, 无需手动同步可见范围(2026-08-12 移除旧版独立 chart sync)
     chart.subscribeCrosshairMove((param: MouseEventParams) => {
       const point = param?.point
@@ -732,7 +815,7 @@ export default function InteractiveKline(props: {
         // ignore
       }
     }
-  }, [series, lwReady, showRsi, indexByDate, interval, mode, mainIntentData])
+  }, [series, lwReady, showRsi, indexByDate, interval, mode, mainIntentData, overlays])
 
   // 主力意图图例(2026-08-12): 展示方向/筹码峰/成本带, 仅在传入结构化数据时显示
   const mi = props.mainIntent ?? mainIntentData

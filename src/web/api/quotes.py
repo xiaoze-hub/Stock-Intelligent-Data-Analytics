@@ -157,6 +157,102 @@ async def get_dark_flow_tq(symbol: str, market: str = "CN"):
     return data
 
 
+def _build_overlays(symbol: str, market: str, positions, trades, actions) -> dict:
+    """纯函数(M5): 持仓/成交/除权行 → {cost_lines, trade_markers, ex_marks}。"""
+    cost_lines: list = []
+    trade_markers: list = []
+    ex_marks: list = []
+
+    def _day(v) -> str:
+        try:
+            if v is None:
+                return ""
+            return v.date().isoformat() if hasattr(v, "date") else str(v)[:10]
+        except Exception:
+            return ""
+
+    for p in positions or []:
+        entry = getattr(p, "entry_price", None)
+        if entry:
+            cost_lines.append({"price": float(entry), "label": f"持仓成本 {entry}", "kind": "cost"})
+            sl = getattr(p, "stop_loss", None)
+            if sl:
+                cost_lines.append({"price": float(sl), "label": f"止损 {sl}", "kind": "stop"})
+            tp = getattr(p, "target_price", None)
+            if tp:
+                cost_lines.append({"price": float(tp), "label": f"目标 {tp}", "kind": "target"})
+            d = _day(getattr(p, "opened_at", None))
+            if d:
+                trade_markers.append({
+                    "date": d, "side": "buy", "price": float(entry),
+                    "label": f"买入 {getattr(p, 'quantity', '') or ''}股",
+                })
+    for t in trades or []:
+        entry = getattr(t, "entry_price", None)
+        d = _day(getattr(t, "opened_at", None))
+        if d and entry:
+            trade_markers.append({"date": d, "side": "buy", "price": float(entry), "label": "买入"})
+        exitp = getattr(t, "exit_price", None)
+        d2 = _day(getattr(t, "closed_at", None))
+        if d2 and exitp:
+            reason = getattr(t, "exit_reason", "") or ""
+            trade_markers.append({
+                "date": d2, "side": "sell", "price": float(exitp),
+                "label": f"卖出({reason})" if reason else "卖出",
+            })
+    for a in actions or []:
+        parts = []
+        if getattr(a, "dividend_per_share", None):
+            parts.append(f"派{getattr(a, 'dividend_per_share')}")
+        if getattr(a, "bonus_ratio", None):
+            parts.append(f"送{getattr(a, 'bonus_ratio')}")
+        if getattr(a, "transfer_ratio", None):
+            parts.append(f"转{getattr(a, 'transfer_ratio')}")
+        exd = str(getattr(a, "ex_date", "") or "")[:10]
+        if exd:
+            ex_marks.append({"date": exd, "label": ("10" + "".join(parts)) if parts else "除权除息"})
+    return {
+        "symbol": symbol, "market": market,
+        "cost_lines": cost_lines, "trade_markers": trade_markers, "ex_marks": ex_marks,
+    }
+
+
+@router.get("/{symbol}/overlays")
+def get_kline_overlays(symbol: str, market: str = "CN", db: Session = Depends(get_db)):
+    """K线叠加层(M5): 持仓成本/止损/目标线 + 买卖点 + 除权除息标记。单例影子账户, 无数据给空数组不抛。"""
+    from src.web.models import CorporateAction, PaperTradingPosition, PaperTradingTrade
+
+    market_code = _parse_market(market)
+    mkt = market_code.value
+    try:
+        positions = (
+            db.query(PaperTradingPosition)
+            .filter(PaperTradingPosition.stock_symbol == symbol, PaperTradingPosition.stock_market == mkt)
+            .all()
+        )
+    except Exception:
+        positions = []
+    try:
+        trades = (
+            db.query(PaperTradingTrade)
+            .filter(PaperTradingTrade.stock_symbol == symbol, PaperTradingTrade.stock_market == mkt)
+            .order_by(PaperTradingTrade.closed_at.asc())
+            .all()
+        )
+    except Exception:
+        trades = []
+    try:
+        actions = (
+            db.query(CorporateAction)
+            .filter(CorporateAction.symbol == symbol, CorporateAction.market == mkt)
+            .order_by(CorporateAction.ex_date.asc())
+            .all()
+        )
+    except Exception:  # 旧库未跑 _m127, 表不存在
+        actions = []
+    return _build_overlays(symbol, mkt, positions, trades, actions)
+
+
 # 公司简介内存缓存(避免每次详情页都调 zhitu 耗时 1.8s)
 _COMPANY_CACHE: dict = {}  # {(symbol, market): (ts, payload)}
 _COMPANY_CACHE_TTL = 3600  # 1 小时
