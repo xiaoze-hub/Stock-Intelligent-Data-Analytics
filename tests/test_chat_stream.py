@@ -68,13 +68,16 @@ class _FakeAIClient:
 def client(monkeypatch):
     from src.web.app import app
 
-    # 统一替换 AI 客户端工厂 + 工具执行(不触网/不触数据源)
-    monkeypatch.setattr(chat_api, "_get_ai_client", lambda db, model_id=None, user=None: _FakeAIClient())
+    # 统一替换 AI 客户端工厂 + 工具执行(不触网/不触数据源)。
+    # 2026-09-09 chat包拆分后按定义/引用模块打点(engine+routes/tools), 打包属性无效。
+    _fake_factory = lambda db, model_id=None, user=None: _FakeAIClient()  # noqa: E731
+    monkeypatch.setattr("src.web.api.chat.engine._get_ai_client", _fake_factory)
+    monkeypatch.setattr("src.web.api.chat.routes._get_ai_client", _fake_factory)
 
     async def _fake_execute_tool(db, name, args, user=None):
         return f"工具 {name} 返回: 主力净流入 +1.2亿"
 
-    monkeypatch.setattr(chat_api, "_execute_tool", _fake_execute_tool)
+    monkeypatch.setattr("src.web.api.chat.tools._execute_tool", _fake_execute_tool)
     return TestClient(app)
 
 

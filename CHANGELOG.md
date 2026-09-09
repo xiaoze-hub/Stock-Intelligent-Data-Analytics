@@ -2,6 +2,10 @@
 
 ## 2026-09-09
 
+### update
+
+- 对话API拆包(第2项后端): `chat.py:2980` → `chat/` 包(prompts140/context763/tools1100/engine545/routes478, 无逻辑变更, AST切分)。`__init__` 重导出外部依赖面(router/_get_ai_client/_execute_tool等12个), 旧import路径零改动；`test_chat_stream` mock打点改按定义/引用模块(engine+routes/tools)；`test_ai_layer_data_sources`源码扫描路径跟随tools.py。全量门禁1038+1与拆前一致
+
 ### fix
 
 - 行情来源标注透传(原第5项TQ熔断的剩余缺口; 熔断/timeout/key轮换/metrics引擎早已有): `Quote.source` + 引擎命中回填(显式源不覆盖) + `_quote_to_row` + `/quotes` 响应 `source` 字段。前端可据此显式标注来源/无数据

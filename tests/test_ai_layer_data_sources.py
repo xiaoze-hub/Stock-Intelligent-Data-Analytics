@@ -88,7 +88,7 @@ class TestMaCriticalGuard:
 class TestNewsMultiSource:
     def test_chat_news_uses_flash_news(self):
         """get_market_news 应优先市场级多源快讯(flash_news), 悟道降级。"""
-        src = open(str(ROOT / "src/web/api/chat.py")).read()
+        src = open(str(ROOT / "src/web/api/chat/tools.py")).read()
         assert "flash_news" in src
         assert "wudao_mcp_client" in src
         # 在 get_market_news 分支内部: flash_news(多源)应出现在 news_hotlist(悟道)之前
