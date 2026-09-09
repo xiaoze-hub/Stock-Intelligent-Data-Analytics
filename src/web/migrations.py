@@ -2133,6 +2133,45 @@ def _m126_disable_tq_default_off(conn: Connection) -> None:
     conn.execute(text("UPDATE data_sources SET enabled = FALSE WHERE provider = 'tq'"))
 
 
+def _m127_corporate_actions_table(conn: Connection) -> None:
+    """除权除息事件表 corporate_actions(M1)。
+
+    存每股派息/送转(东财口径) + 来源。回测前复权与 K 线除权标记共用。
+    ORM 建模(CorporateAction, create_all 覆盖 sqlite 测试库); 本迁移负责
+    生产 PG 的表结构, id 类型按方言分支(SERIAL vs AUTOINCREMENT)。
+    """
+    id_col = "SERIAL PRIMARY KEY" if _dialect_is_pg(conn) else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    conn.execute(
+        text(
+            f"""
+CREATE TABLE IF NOT EXISTS corporate_actions (
+  id {id_col},
+  symbol TEXT NOT NULL,
+  market TEXT NOT NULL DEFAULT 'CN',
+  ex_date TEXT NOT NULL,
+  dividend_per_share DOUBLE PRECISION,
+  bonus_ratio DOUBLE PRECISION,
+  transfer_ratio DOUBLE PRECISION,
+  source TEXT NOT NULL DEFAULT 'eastmoney',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+"""
+        )
+    )
+    conn.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_corp_action_symbol_ex "
+            "ON corporate_actions(symbol, market, ex_date, source)"
+        )
+    )
+    conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_corp_action_ex_date "
+            "ON corporate_actions(ex_date)"
+        )
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(101, "agent_config_kind_and_visibility", _m101_agent_config_kind),
     Migration(102, "backfill_agent_kind_data", _m102_backfill_agent_kind),
@@ -2168,6 +2207,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     ),
     Migration(125, "klines_table", _m125_klines_table),
     Migration(126, "disable_tq_default_off", _m126_disable_tq_default_off),
+    Migration(127, "corporate_actions_table", _m127_corporate_actions_table),
 )
 
 

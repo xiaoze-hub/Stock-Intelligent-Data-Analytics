@@ -2,6 +2,10 @@
 
 ## 2026-09-10
 
+### feature
+
+- M1除权除息: `corporate_actions`表(_m127+ORM)+东财分红入库(`sync_corporate_actions`)+前复权(`ex_factor`/`apply_forward_adjust`)+回测`actions`接入；口径按每股派息/每10股送转，异常因子跳过记日志
+
 ### fix
 
 - S1止损跌停顺延验收: 确认锁死日`continue`在止损检查之前(止损同样顺延), 已有`test_engine_down_lock_exit_deferred`覆盖, 无需改代码

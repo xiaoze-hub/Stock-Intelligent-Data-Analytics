@@ -367,6 +367,32 @@ class DataSource(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class CorporateAction(Base):
+    """除权除息事件（M1）。东财分红口径入库，回测前复权与 K 线除权标记共用。
+
+    dividend_per_share: 每股派息(元)；bonus_ratio/transfer_ratio: 每10股送/转股数。
+    """
+
+    __tablename__ = "corporate_actions"
+    __table_args__ = (
+        UniqueConstraint(
+            "symbol", "market", "ex_date", "source",
+            name="uq_corp_action_symbol_ex",
+        ),
+        Index("ix_corp_action_ex_date", "ex_date"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String, nullable=False)
+    market = Column(String, nullable=False, default="CN")
+    ex_date = Column(String, nullable=False)  # YYYY-MM-DD(除权除息日)
+    dividend_per_share = Column(Float, nullable=True)
+    bonus_ratio = Column(Float, nullable=True)
+    transfer_ratio = Column(Float, nullable=True)
+    source = Column(String, nullable=False, default="eastmoney")
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class NewsCache(Base):
     """新闻缓存（用于去重）"""
 

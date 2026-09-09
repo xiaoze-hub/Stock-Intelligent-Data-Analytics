@@ -122,10 +122,20 @@ class Backtester:
         self.sizer = sizer or fixed_cash_sizer(cash_per_trade, lot)
         self.limit_pct_overrides = dict(limit_pct_overrides or {})
 
-    def run_single(self, signal: Signal, bars: list[PriceBar]) -> BTTrade | None:
-        """单信号回测:下一交易日开盘入场,逐日止损/止盈/到期平仓。"""
+    def run_single(self, signal: Signal, bars: list[PriceBar], actions: list | None = None) -> BTTrade | None:
+        """单信号回测:下一交易日开盘入场,逐日止损/止盈/到期平仓。
+
+        actions: 该标的除权除息事件(CorpAction 列表, 可选)。传入则先做前复权,
+        消掉除权缺口假信号；不传保持旧行为。
+        """
         if not bars:
             return None
+        if actions:
+            from src.core.corporate_actions import apply_forward_adjust
+
+            bars = apply_forward_adjust(bars, actions)
+            if not bars:
+                return None
         ei = first_index_after(bars, signal.signal_date)
         if ei is None or ei >= len(bars):
             return None
@@ -202,20 +212,23 @@ class Backtester:
         )
 
     def run(
-        self, signals: list[Signal], bars_by_symbol: dict
+        self, signals: list[Signal], bars_by_symbol: dict, actions_by_symbol: dict | None = None
     ) -> BacktestResult:
         """批量回测,聚合净值曲线与绩效指标。
 
         bars_by_symbol: 键可为 (symbol, market) 或 symbol。
+        actions_by_symbol: 可选, 同键的除权事件列表, 传入则逐只前复权。
         """
         trades: list[BTTrade] = []
         skipped = 0
+        actions_by_symbol = actions_by_symbol or {}
         for sig in signals:
             bars = bars_by_symbol.get((sig.symbol, sig.market)) or bars_by_symbol.get(sig.symbol)
             if not bars:
                 skipped += 1
                 continue
-            t = self.run_single(sig, bars)
+            acts = actions_by_symbol.get((sig.symbol, sig.market)) or actions_by_symbol.get(sig.symbol)
+            t = self.run_single(sig, bars, acts)
             if t is None:
                 skipped += 1
                 continue

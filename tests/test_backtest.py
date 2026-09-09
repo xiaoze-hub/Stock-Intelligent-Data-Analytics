@@ -190,3 +190,51 @@ def test_fill_slippage_override_and_default_compat():
     rt = cm.round_trip_pnl(10.0, 10.5, 1000, slippage_bps=15.0)
     rt0 = cm.round_trip_pnl(10.0, 10.5, 1000)
     assert rt["pnl"] < rt0["pnl"]
+
+
+# ──────────────── 除权前复权(2026-09-10, M1) ────────────────
+
+def test_ex_factor_cash_and_bonus():
+    """现金分红+送转的理论除权因子。"""
+    from src.core.corporate_actions import CorpAction, ex_factor
+
+    # 前收10, 每股派0.5 + 10送5: m=1.5, theo=(10-0.5)/1.5=6.333
+    fac = ex_factor(10.0, CorpAction(symbol="X", market="CN", ex_date="2026-01-06",
+                                     dividend_per_share=0.5, bonus_ratio=5.0))
+    assert fac is not None
+    f, m = fac
+    assert m == 1.5 and abs(f - 6.333333 / 10.0) < 1e-6
+    assert ex_factor(10.0, CorpAction(symbol="X", market="CN", ex_date="2026-01-06")) is None
+    assert ex_factor(0.0, CorpAction(symbol="X", market="CN", ex_date="2026-01-06",
+                                     dividend_per_share=0.5)) is None
+
+
+def test_forward_adjust_kills_ex_div_gap():
+    """除权缺口前复权后消失; 输入列表不变(返回新列表)。"""
+    from src.core.corporate_actions import CorpAction, apply_forward_adjust
+
+    bars = [_bar("2026-01-02", 10, 10, 10, 10),
+            _bar("2026-01-03", 10, 10, 10, 10),
+            _bar("2026-01-06", 9.5, 9.5, 9.5, 9.5)]  # 每股派0.5除权
+    acts = [CorpAction(symbol="X", market="CN", ex_date="2026-01-06", dividend_per_share=0.5)]
+    adj = apply_forward_adjust(bars, acts)
+    assert adj is not bars
+    assert bars[0].close == 10  # 输入不变
+    assert abs(adj[0].close - 9.5) < 1e-9  # 10 * 0.95
+    assert adj[2].close == 9.5  # 除权日及之后不动
+    assert apply_forward_adjust(bars, []) == bars
+
+
+def test_run_single_with_actions_no_fake_gap_trade():
+    """带除权事件回测: 入场用复权价(9.5而非10), 消掉除权缺口对信号的扭曲。"""
+    from src.core.corporate_actions import CorpAction
+
+    bars = [_bar("2026-01-01", 10, 10, 10, 10),
+            _bar("2026-01-02", 10, 10.1, 9.9, 10),
+            _bar("2026-01-05", 9.5, 9.6, 9.4, 9.5)]  # 派0.5除权
+    acts = [CorpAction(symbol="600519", market="CN", ex_date="2026-01-05", dividend_per_share=0.5)]
+    sig = Signal("600519", "CN", "2026-01-01", stop_loss=8.0, target_price=12.0, holding_days=10)
+    t_raw = Backtester().run_single(sig, bars)
+    t_adj = Backtester().run_single(sig, bars, acts)
+    assert t_raw is not None and t_raw.entry_price == 10
+    assert t_adj is not None and t_adj.entry_price == 9.5
