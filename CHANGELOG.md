@@ -4,6 +4,7 @@
 
 ### update
 
+- 股票页拆分(第2项前端): `Stocks.tsx:3421` → 类型抽 `stocks/types.ts`(230行) + 纯函数抽 `stocks/portfolio.ts`(165行, round2/mergePortfolioQuotes等), 页面剩3030行。tsc+vite build双过；组件内112个hook的域拆分需配合可视化验收，留后续
 - 对话API拆包(第2项后端): `chat.py:2980` → `chat/` 包(prompts140/context763/tools1100/engine545/routes478, 无逻辑变更, AST切分)。`__init__` 重导出外部依赖面(router/_get_ai_client/_execute_tool等12个), 旧import路径零改动；`test_chat_stream` mock打点改按定义/引用模块(engine+routes/tools)；`test_ai_layer_data_sources`源码扫描路径跟随tools.py。全量门禁1038+1与拆前一致
 
 ### fix
