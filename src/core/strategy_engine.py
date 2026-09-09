@@ -1655,7 +1655,14 @@ def evaluate_strategy_outcomes(
     horizons: tuple[int, ...] = (1, 3, 5, 10),
     snapshot_days: int = 60,
     limit: int = 800,
+    asof: date | str | None = None,
 ) -> dict:
+    """策略信号后验评估(M2: asof 可注入时钟)。
+
+    asof: 评估基准日(默认今天)。所有"今天"语义(cutoff 窗口、到期判定、
+    K线回看长度)一律以 asof 为准 —— 历史任意时点重跑结果一致, 才是
+    无未来函数的可验证评估。传字符串 YYYY-MM-DD 或 date 均可。
+    """
     stats = {
         "total_signals": 0,
         "eligible": 0,
@@ -1670,7 +1677,13 @@ def evaluate_strategy_outcomes(
 
     db = SessionLocal()
     try:
-        cutoff = date.today() - timedelta(days=max(7, int(snapshot_days)))
+        if asof is None:
+            today = date.today()
+        elif isinstance(asof, date):
+            today = asof
+        else:
+            today = _parse_day(str(asof)) or date.today()
+        cutoff = today - timedelta(days=max(7, int(snapshot_days)))
         signals = (
             db.query(StrategySignalRun)
             .filter(
@@ -1693,7 +1706,6 @@ def evaluate_strategy_outcomes(
         )
         existing = {(int(x), int(y)) for x, y in existing_rows}
 
-        today = date.today()
         kline_cache: dict[tuple[str, str], list] = {}
         pending = 0  # 分批提交计数,缩短写事务窗口
 

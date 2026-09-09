@@ -5,6 +5,7 @@
 ### feature
 
 - M1除权除息: `corporate_actions`表(_m127+ORM)+东财分红入库(`sync_corporate_actions`)+前复权(`ex_factor`/`apply_forward_adjust`)+回测`actions`接入；口径按每股派息/每10股送转，异常因子跳过记日志
+- M2 asof可注入时钟: `evaluate_strategy_outcomes(asof)`+评估端点可选`asof`查询参数(历史重跑)；`tests/test_strategy_pit.py`锁PIT(未来尖峰零影响+未到期跳过)
 
 ### fix
 

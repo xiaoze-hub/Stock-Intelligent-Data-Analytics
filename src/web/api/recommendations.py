@@ -439,11 +439,13 @@ def strategy_signal_refresh_status():
 def evaluate_strategy_signal_outcomes(
     limit: int = Query(800, ge=20, le=5000),
     snapshot_days: int = Query(60, ge=7, le=365),
+    asof: str | None = Query(None, description="评估基准日YYYY-MM-DD, 缺省今天(历史重跑传过去某天)"),
 ):
     return evaluate_strategy_outcomes(
         horizons=(1, 3, 5, 10),
         snapshot_days=snapshot_days,
         limit=limit,
+        asof=asof,
     )
 
 
