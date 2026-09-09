@@ -54,3 +54,31 @@ def test_engine_imports_ok():
     assert hasattr(e, "ENGINE")
     assert hasattr(e, "COST_MODEL")
     assert hasattr(e, "_compute_quantity")
+
+
+# ──────────────── 组合熔断(S5a, 2026-09-10, 先记录) ────────────────
+
+def test_assess_risk_all_clear():
+    """正常组合不冻结。"""
+    from src.core.paper_trading_engine import assess_portfolio_risk
+
+    r = assess_portfolio_risk(equity=1_000_000, peak=1_000_000, day_realized=1000, positions_mv=[200_000, 100_000])
+    assert r["frozen"] is False and r["reasons"] == []
+
+
+def test_assess_risk_day_loss_freezes():
+    """当日已实现亏损超3%冻结。"""
+    from src.core.paper_trading_engine import assess_portfolio_risk
+
+    r = assess_portfolio_risk(equity=1_000_000, peak=1_050_000, day_realized=-35_000, positions_mv=[100_000])
+    assert r["frozen"] is True and any("已实现" in x for x in r["reasons"])
+
+
+def test_assess_risk_drawdown_and_concentration():
+    """峰值回撤8%/单票40%各自独立触发。"""
+    from src.core.paper_trading_engine import assess_portfolio_risk
+
+    r1 = assess_portfolio_risk(equity=900_000, peak=1_000_000, day_realized=0, positions_mv=[100_000])
+    assert r1["frozen"] is True and any("回撤" in x for x in r1["reasons"])
+    r2 = assess_portfolio_risk(equity=1_000_000, peak=1_000_000, day_realized=0, positions_mv=[450_000, 100_000])
+    assert r2["frozen"] is True and any("集中" in x for x in r2["reasons"])

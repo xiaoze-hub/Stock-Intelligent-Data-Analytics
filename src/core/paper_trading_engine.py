@@ -33,6 +33,46 @@ FIXED_QUANTITY = 100
 # 移动止损:浮盈超过 MIN_PROFIT_FOR_TRAILING 后启用,从持仓最高价回撤超 TRAILING_STOP_PCT 即离场
 MIN_PROFIT_FOR_TRAILING = 0.05
 TRAILING_STOP_PCT = 0.10
+
+# 组合熔断阈值(S5a, 2026-09-10, 先记录后阻断):
+# 触发即写站内 Notification + 结果进 scan_once 返回, 本阶段不阻断开仓。
+# 下一阶段(S5b)由 _check_entries 读取 frozen 状态跳过新建仓。
+MAX_DAY_LOSS_PCT = 3.0    # 当日已实现亏损超权益 3% → 冻结新开仓
+MAX_PORTFOLIO_DRAWDOWN_PCT = 8.0  # 峰值回撤超 8% → 冻结新开仓
+MAX_SINGLE_NAME_PCT = 40.0  # 单票市值超权益 40% → 冻结新开仓(防同题材All-in)
+
+
+def assess_portfolio_risk(
+    *,
+    equity: float,
+    peak: float,
+    day_realized: float,
+    positions_mv: list[float],
+) -> dict:
+    """纯函数: 组合风险评估(无 DB, 可单测)。
+
+    返回 {equity, drawdown_pct, day_loss_pct, concentration_pct, frozen, reasons[]}。
+    frozen=True 的条件任一命中: 日亏损/峰值回撤/单票集中。三者都是只做多A股
+    模拟盘爆仓前最后防线, 阈值见模块常量。
+    """
+    reasons: list[str] = []
+    drawdown_pct = (peak - equity) / peak * 100.0 if peak > 0 else 0.0
+    day_loss_pct = (-day_realized) / equity * 100.0 if equity > 0 else 0.0
+    concentration_pct = (max(positions_mv) / equity * 100.0) if positions_mv and equity > 0 else 0.0
+    if day_loss_pct >= MAX_DAY_LOSS_PCT:
+        reasons.append(f"当日已实现亏损{day_loss_pct:.1f}%≥{MAX_DAY_LOSS_PCT}%")
+    if drawdown_pct >= MAX_PORTFOLIO_DRAWDOWN_PCT:
+        reasons.append(f"峰值回撤{drawdown_pct:.1f}%≥{MAX_PORTFOLIO_DRAWDOWN_PCT}%")
+    if concentration_pct >= MAX_SINGLE_NAME_PCT:
+        reasons.append(f"单票集中{concentration_pct:.1f}%≥{MAX_SINGLE_NAME_PCT}%")
+    return {
+        "equity": round(equity, 2),
+        "drawdown_pct": round(drawdown_pct, 2),
+        "day_loss_pct": round(day_loss_pct, 2),
+        "concentration_pct": round(concentration_pct, 2),
+        "frozen": bool(reasons),
+        "reasons": reasons,
+    }
 # 时间止损:无 signal.holding_days 时的默认最大持有自然日
 DEFAULT_TIME_STOP_DAYS = 20
 
@@ -613,6 +653,78 @@ class PaperTradingEngine:
             if drawdown > account.max_drawdown_pct:
                 account.max_drawdown_pct = round(drawdown, 2)
 
+    def daily_risk_check(self, db: Session) -> dict:
+        """组合熔断检查(S5a: 只记录不阻断)。
+
+        聚合权益/峰值/当日已实现/集中度 → assess_portfolio_risk →
+        触发时写一条站内 Notification(同日去重)。调用方异常自吞,不影响扫描。
+        """
+        from datetime import date as _date
+
+        from src.web.models import Notification, PaperTradingTrade
+
+        try:
+            account = self._get_or_create_account(db)
+            open_positions = (
+                db.query(PaperTradingPosition)
+                .filter(PaperTradingPosition.status == "open")
+                .all()
+            )
+            mv_list = [
+                float((p.current_price or p.entry_price or 0) * (p.quantity or 0))
+                for p in open_positions
+            ]
+            equity = float(account.current_capital or 0) + sum(
+                float(p.unrealized_pnl or 0) for p in open_positions
+            )
+            today = _date.today().isoformat()
+            day_realized = 0.0
+            for t in db.query(PaperTradingTrade).all():
+                try:
+                    closed = t.closed_at
+                    day = closed.date().isoformat() if hasattr(closed, "date") else str(closed)[:10]
+                except Exception:
+                    continue
+                if day == today:
+                    day_realized += float(t.pnl or 0)
+            risk = assess_portfolio_risk(
+                equity=equity,
+                peak=float(account.peak_capital or equity),
+                day_realized=day_realized,
+                positions_mv=mv_list,
+            )
+            risk["day_realized"] = round(day_realized, 2)
+            if risk["frozen"]:
+                title = "模拟盘组合熔断(记录,暂未阻断)"
+                exists = (
+                    db.query(Notification)
+                    .filter(
+                        Notification.category == "paper_trading",
+                        Notification.title == title,
+                    )
+                    .order_by(Notification.id.desc())
+                    .first()
+                )
+                same_day = False
+                if exists and exists.created_at:
+                    try:
+                        same_day = str(exists.created_at)[:10] == today
+                    except Exception:
+                        same_day = False
+                if not same_day:
+                    db.add(Notification(
+                        category="paper_trading",
+                        level="warning",
+                        title=title,
+                        body="；".join(risk["reasons"]),
+                        source="daily_risk_check",
+                    ))
+                    db.commit()
+            return risk
+        except Exception as e:  # noqa: BLE001 — 风控检查永不阻断扫描
+            logger.warning(f"[模拟盘] 熔断检查失败(已忽略): {e}")
+            return {"frozen": False, "reasons": [], "error": str(e)}
+
     def _scan_sync(self) -> dict:
         """同步扫描（在线程中执行）。"""
         db = SessionLocal()
@@ -623,6 +735,7 @@ class PaperTradingEngine:
 
             opened, new_keys, entry_events = self._check_entries(db, account)
             closed, exit_events = self._check_exits(db, account, skip_keys=new_keys)
+            risk = self.daily_risk_check(db)
 
             # 在 db.close() 前将 ORM 对象序列化为 dict，避免 detached 问题
             serialized_entries = [
@@ -638,6 +751,7 @@ class PaperTradingEngine:
                 "status": "ok",
                 "opened": opened,
                 "closed": closed,
+                "risk": risk,
                 "entry_events": serialized_entries,
                 "exit_events": serialized_exits,
             }

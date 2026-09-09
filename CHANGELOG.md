@@ -8,6 +8,7 @@
 - S2 outcome可执行基准: `evaluate_strategy_outcomes`基准改次日开盘(`_pick_open_after`, 与回测入场一致), 旧降级链保留并记`meta.base_kind`(next_open/signal_px)
 - S3滑点分档: `CostModel.slippage_bps_for(市值)`大3/中5/小10/微15bps, `fill()`/`round_trip_pnl()`接受覆盖, 不传零改动
 - S4 chat包快照测试: `tests/test_chat_package.py`锁死7路由+12导出+子模块归属(防拆分类/mock打点事故)
+- S5a组合熔断(记录阶段): `assess_portfolio_risk`纯函数(日亏3%/回撤8%/集中40%) + `daily_risk_check`每轮扫描聚合+触发写站内通知(同日去重)+结果进scan返回；本阶段不阻断开仓，S5b再接`_check_entries`冻结
 
 ## 2026-09-09
 
