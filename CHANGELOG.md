@@ -2,6 +2,10 @@
 
 ## 2026-09-09
 
+### doc
+
+- README中英同步v0.4.34(徽标+ACR tag+来源标注/TQ默认关闭说明)；Release v0.4.34补亮点+国内ACR拉取地址；About已OK(描述/主页/topics满20个，无需动)
+
 ### update
 
 - 图表库npm化(第6项b): `lightweight-charts@5.2.1` pin进biz-ui依赖，删index.html双CDN；`InteractiveKline`/`MinuteLwcChart`改typed v5直调（去getLW/any垫片、去v4兼容分支、markers/crosshair/time全类型化，`mode:1`→`CrosshairMode.Magnet`同值）；删死文件`MinuteEChart.tsx`（ECharts分时早被LWC替换后的残留）。tsc+vite build双过，lib打进InteractiveKline chunk（240KB含运行时），dist无CDN引用
