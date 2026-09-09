@@ -8,6 +8,11 @@
 
 滑点体现在实际成交价(fill_price),不重复计入显式规费;显式规费 = 佣金+印花税+过户费。
 现金变动(cash_delta)= 买入为负、卖出为正,已扣全部成本与滑点,PnL 由买卖两腿 cash_delta 相加得出。
+
+滑点分档(S3, 2026-09-10): 固定 5bps 对小票/高波动是系统性低估。
+`slippage_bps_for(市值)` 按流通市值分档(大盘3/中盘5/小盘10/微盘15bps),
+未知市值回退默认 5bps。`fill()`/`round_trip_pnl()` 接受 `slippage_bps` 覆盖,
+不传保持旧行为(调用方零改动)。
 """
 
 from __future__ import annotations
@@ -47,14 +52,37 @@ class Fill:
 class CostModel:
     """A 股交易成本计算器。线程无关,可全局复用。"""
 
+    # 流通市值分档阈值(元)与对应滑点(基点): 大/中/小/微
+    SLIPPAGE_TIERS: tuple[tuple[float, float], ...] = (
+        (500e8, 3.0),   # >=500亿: 大盘 3bps
+        (100e8, 5.0),   # >=100亿: 中盘 5bps(默认档)
+        (20e8, 10.0),   # >=20亿: 小盘 10bps
+    )
+    MICRO_SLIPPAGE_BPS = 15.0  # <20亿: 微盘 15bps
+
     def __init__(self, config: CostConfig | None = None) -> None:
         self.cfg = config or CostConfig()
 
-    def _apply_slippage(self, price: float, side: str) -> float:
-        adj = price * self.cfg.slippage_bps / 10000.0
+    @classmethod
+    def slippage_bps_for(cls, market_cap_yuan: float | None) -> float:
+        """按流通市值取滑点档; 未知/非法回退默认档(5bps)。"""
+        try:
+            cap = float(market_cap_yuan) if market_cap_yuan is not None else float("nan")
+        except Exception:
+            return CostConfig().slippage_bps
+        if cap != cap or cap <= 0:  # NaN/非正
+            return CostConfig().slippage_bps
+        for threshold, bps in cls.SLIPPAGE_TIERS:
+            if cap >= threshold:
+                return bps
+        return cls.MICRO_SLIPPAGE_BPS
+
+    def _apply_slippage(self, price: float, side: str, slippage_bps: float | None = None) -> float:
+        bps = float(slippage_bps) if slippage_bps is not None else self.cfg.slippage_bps
+        adj = price * bps / 10000.0
         return price + adj if side == "buy" else max(0.0, price - adj)
 
-    def fill(self, side: str, price: float, quantity: int) -> Fill:
+    def fill(self, side: str, price: float, quantity: int, slippage_bps: float | None = None) -> Fill:
         """计算一笔成交的成本与现金变动。
 
         Args:
@@ -69,7 +97,7 @@ class CostModel:
         if qty <= 0 or price <= 0:
             raise ValueError(f"price/quantity 必须为正,得到 price={price} qty={quantity}")
 
-        fill_price = self._apply_slippage(price, side)
+        fill_price = self._apply_slippage(price, side, slippage_bps)
         gross = fill_price * qty
         commission = max(gross * self.cfg.commission_rate, self.cfg.min_commission)
         stamp_duty = gross * self.cfg.stamp_duty_rate if side == "sell" else 0.0
@@ -98,11 +126,12 @@ class CostModel:
         )
 
     def round_trip_pnl(
-        self, entry_price: float, exit_price: float, quantity: int
+        self, entry_price: float, exit_price: float, quantity: int,
+        slippage_bps: float | None = None,
     ) -> dict:
         """一买一卖的完整盈亏(扣全部成本)。便于单笔回测与对账。"""
-        buy = self.fill("buy", entry_price, quantity)
-        sell = self.fill("sell", exit_price, quantity)
+        buy = self.fill("buy", entry_price, quantity, slippage_bps)
+        sell = self.fill("sell", exit_price, quantity, slippage_bps)
         # 现金口径:买入流出 -cash_delta(正数),卖出流入 cash_delta
         invested = -buy.cash_delta
         proceeds = sell.cash_delta

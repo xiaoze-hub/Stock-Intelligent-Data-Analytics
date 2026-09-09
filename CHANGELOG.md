@@ -6,6 +6,7 @@
 
 - S1止损跌停顺延验收: 确认锁死日`continue`在止损检查之前(止损同样顺延), 已有`test_engine_down_lock_exit_deferred`覆盖, 无需改代码
 - S2 outcome可执行基准: `evaluate_strategy_outcomes`基准改次日开盘(`_pick_open_after`, 与回测入场一致), 旧降级链保留并记`meta.base_kind`(next_open/signal_px)
+- S3滑点分档: `CostModel.slippage_bps_for(市值)`大3/中5/小10/微15bps, `fill()`/`round_trip_pnl()`接受覆盖, 不传零改动
 
 ## 2026-09-09
 

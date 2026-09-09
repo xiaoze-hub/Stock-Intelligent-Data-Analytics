@@ -162,3 +162,31 @@ def test_pick_open_after_uses_next_session():
     assert _pick_open_after(klines, date(2026, 1, 2)) == 10.8
     assert _pick_open_after(klines, date(2026, 1, 6)) is None
     assert _pick_open_after([], date(2026, 1, 2)) is None
+
+
+# ──────────────── 滑点分档(2026-09-10, S3) ────────────────
+
+def test_slippage_tiers_by_market_cap():
+    """大3/中5/小10/微15bps, 未知回退默认5bps。"""
+    from src.core.backtest.cost_model import CostModel
+
+    assert CostModel.slippage_bps_for(600e8) == 3.0
+    assert CostModel.slippage_bps_for(200e8) == 5.0
+    assert CostModel.slippage_bps_for(50e8) == 10.0
+    assert CostModel.slippage_bps_for(5e8) == 15.0
+    assert CostModel.slippage_bps_for(None) == 5.0
+    assert CostModel.slippage_bps_for(-1) == 5.0
+
+
+def test_fill_slippage_override_and_default_compat():
+    """覆盖生效; 不传保持旧行为(老调用零改动)。"""
+    from src.core.backtest.cost_model import CostModel
+
+    cm = CostModel()
+    base = cm.fill("buy", 10.0, 1000)
+    tier = cm.fill("buy", 10.0, 1000, slippage_bps=15.0)
+    assert tier.fill_price > base.fill_price
+    assert tier.friction > base.friction
+    rt = cm.round_trip_pnl(10.0, 10.5, 1000, slippage_bps=15.0)
+    rt0 = cm.round_trip_pnl(10.0, 10.5, 1000)
+    assert rt["pnl"] < rt0["pnl"]
