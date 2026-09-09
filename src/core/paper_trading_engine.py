@@ -733,9 +733,14 @@ class PaperTradingEngine:
             if not account.enabled:
                 return {"status": "disabled"}
 
-            opened, new_keys, entry_events = self._check_entries(db, account)
-            closed, exit_events = self._check_exits(db, account, skip_keys=new_keys)
+            # S5b: 熔断阻断开仓(平仓永远放行)。risk 先算, frozen 则跳过新建仓。
             risk = self.daily_risk_check(db)
+            if risk.get("frozen"):
+                logger.warning(f"[模拟盘] 熔断冻结新开仓: {';'.join(risk.get('reasons', []))}")
+                opened, new_keys, entry_events = 0, set(), []
+            else:
+                opened, new_keys, entry_events = self._check_entries(db, account)
+            closed, exit_events = self._check_exits(db, account, skip_keys=new_keys)
 
             # 在 db.close() 前将 ORM 对象序列化为 dict，避免 detached 问题
             serialized_entries = [

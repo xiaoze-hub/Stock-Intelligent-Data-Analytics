@@ -82,3 +82,53 @@ def test_assess_risk_drawdown_and_concentration():
     assert r1["frozen"] is True and any("回撤" in x for x in r1["reasons"])
     r2 = assess_portfolio_risk(equity=1_000_000, peak=1_000_000, day_realized=0, positions_mv=[450_000, 100_000])
     assert r2["frozen"] is True and any("集中" in x for x in r2["reasons"])
+
+
+# ──────────────── 熔断阻断(S5b, 2026-09-10) ────────────────
+
+def _scan_with_mocked_risk(monkeypatch, frozen: bool):
+    """_scan_sync 编排测试: mock DB/行情, 只验冻结是否阻断开仓、平仓是否放行。"""
+    from unittest.mock import MagicMock
+
+    import src.core.paper_trading_engine as e
+
+    calls = {"entries": 0, "exits": 0}
+    eng = e.PaperTradingEngine()
+    monkeypatch.setattr(e, "SessionLocal", lambda: MagicMock())
+    monkeypatch.setattr(
+        eng, "_get_or_create_account", lambda db: MagicMock(enabled=True)
+    )
+    monkeypatch.setattr(
+        eng,
+        "daily_risk_check",
+        lambda db: {"frozen": frozen, "reasons": ["test"] if frozen else []},
+    )
+
+    def _entries(db, account):
+        calls["entries"] += 1
+        return 2, {("600519", "CN")}, []
+
+    def _exits(db, account, skip_keys=None):
+        calls["exits"] += 1
+        return 1, []
+
+    monkeypatch.setattr(eng, "_check_entries", _entries)
+    monkeypatch.setattr(eng, "_check_exits", _exits)
+    return eng._scan_sync(), calls
+
+
+def test_freeze_blocks_entries_but_not_exits(monkeypatch):
+    """冻结时开仓0、_check_entries未调用, 平仓照常。"""
+    result, calls = _scan_with_mocked_risk(monkeypatch, frozen=True)
+    assert result["status"] == "ok"
+    assert result["opened"] == 0
+    assert calls == {"entries": 0, "exits": 1}
+    assert result["risk"]["frozen"] is True
+
+
+def test_no_freeze_trades_normally(monkeypatch):
+    """未冻结时开仓/平仓都走。"""
+    result, calls = _scan_with_mocked_risk(monkeypatch, frozen=False)
+    assert result["status"] == "ok"
+    assert result["opened"] == 2
+    assert calls == {"entries": 1, "exits": 1}

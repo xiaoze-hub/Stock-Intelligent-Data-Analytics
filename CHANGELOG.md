@@ -9,6 +9,7 @@
 - S3滑点分档: `CostModel.slippage_bps_for(市值)`大3/中5/小10/微15bps, `fill()`/`round_trip_pnl()`接受覆盖, 不传零改动
 - S4 chat包快照测试: `tests/test_chat_package.py`锁死7路由+12导出+子模块归属(防拆分类/mock打点事故)
 - S5a组合熔断(记录阶段): `assess_portfolio_risk`纯函数(日亏3%/回撤8%/集中40%) + `daily_risk_check`每轮扫描聚合+触发写站内通知(同日去重)+结果进scan返回；本阶段不阻断开仓，S5b再接`_check_entries`冻结
+- S5b熔断阻断: `_scan_sync`先算risk，frozen则跳过`_check_entries`(开仓0)，`_check_exits`永远放行；mock编排测试锁死两种状态
 
 ## 2026-09-09
 
