@@ -2,8 +2,9 @@
 
 ## 2026-09-09
 
-### update
+### fix
 
+- 回测涨跌停约束建模(原TODO): `limit_pct_for`(主板10/创科20/北交所30/ST 经 overrides 传5%) + 入场触涨停整笔跳过(计 skipped) + 一字跌停日不可卖出顺延 + 止盈 high 按涨停封顶。两个旧测试按真实约束修正(10→11精确涨停不再视为可买/12.5超涨停 high 不再触发止盈), 新增4例
 - 通达信客户端接口默认关闭: `PANWATCH_ENABLE_TQ` 总开关(默认0, `_rpc` 快失败不发请求) + 种子 `通达信TQ行情/K线 enabled=False` + `_m126` 存量库 tq 行置 disabled。开启需 env=1 且数据源页手动启用。关闭后行情/K线走腾讯/东财降级链, more-info 回404“无数据”, 决策先锋 L2 卡片 `available=False` 置灰, formula/ZLJC 返回空
 
 ## 2026-09-01

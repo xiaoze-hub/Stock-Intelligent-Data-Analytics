@@ -9,7 +9,12 @@
 - 跳空:开盘已越过止损/止盈则按开盘价成交(gap)。
 - 仓位:默认每笔固定名义资金,买 A 股 100 股整数倍(可注入 sizer 供 Phase 1 替换)。
 - 净值曲线:按平仓日累积已实现盈亏(简化);并发持仓的逐日浮动 mark 留作后续扩展。
-- 涨跌停无法成交约束未建模(TODO:需前收 + 板块判定)。
+- 涨跌停约束(2026-09-09 已建模, 需前收 + 板块判定):
+  入场日开盘触涨停(含一字)视为买不进, 整笔跳过(计 skipped);
+  持有期遇一字跌停(全天 high <= 跌停价)当日不可卖出, 顺延到下一可交易日;
+  止盈判定用的 high 按涨停价封顶(超涨停价的目标位永不成交)。
+  板块涨跌幅: 主板 10% / 创业科创(300/301/688) 20% / 北交所(4/8/92开头) 30%;
+  ST 股 5% 无法从代码识别, 调用方经 limit_pct_overrides 传入。
 
 另提供 horizon_return():复刻 strategy_engine.evaluate_strategy_outcomes 口径,用于交叉验证。
 """
@@ -70,6 +75,19 @@ class BacktestResult:
 PositionSizer = Callable[[float], int]  # price -> qty
 
 
+def limit_pct_for(symbol: str, overrides: dict | None = None) -> float:
+    """某标的的涨跌幅比例(小数)。ST 股 5% 无法从代码识别, 经 overrides 传入。"""
+    if overrides and symbol in overrides:
+        return float(overrides[symbol])
+    code = (symbol or "").strip()
+    if len(code) == 6 and code.isdigit():
+        if code.startswith(("688", "300", "301")):
+            return 0.20
+        if code.startswith(("4", "8")) or code.startswith("92"):
+            return 0.30
+    return 0.10
+
+
 def fixed_cash_sizer(cash_per_trade: float, lot: int = 100) -> PositionSizer:
     """每笔固定名义资金,买入 lot 的整数倍。"""
 
@@ -97,10 +115,12 @@ class Backtester:
         cash_per_trade: float = 100_000.0,
         lot: int = 100,
         sizer: PositionSizer | None = None,
+        limit_pct_overrides: dict | None = None,
     ) -> None:
         self.cost = cost_model or CostModel()
         self.initial_capital = float(initial_capital)
         self.sizer = sizer or fixed_cash_sizer(cash_per_trade, lot)
+        self.limit_pct_overrides = dict(limit_pct_overrides or {})
 
     def run_single(self, signal: Signal, bars: list[PriceBar]) -> BTTrade | None:
         """单信号回测:下一交易日开盘入场,逐日止损/止盈/到期平仓。"""
@@ -113,6 +133,12 @@ class Backtester:
         entry_price = entry_bar.open if signal.entry_price is None else float(signal.entry_price)
         if entry_price <= 0:
             return None
+        # 涨跌停门禁(2026-09-09): 入场开盘触涨停买不进(保守计整笔跳过)。
+        pct = limit_pct_for(signal.symbol, self.limit_pct_overrides)
+        if ei > 0 and bars[ei - 1].close > 0:
+            limit_up = round(bars[ei - 1].close * (1 + pct), 2)
+            if entry_price >= limit_up - 1e-6:
+                return None
         qty = self.sizer(entry_price)
         if qty <= 0:
             return None
@@ -127,6 +153,15 @@ class Backtester:
         for j in range(ei + 1, len(bars)):
             held = j - ei
             bar = bars[j]
+            prev_c = bars[j - 1].close
+            if prev_c > 0:
+                limit_dn = round(prev_c * (1 - pct), 2)
+                if bar.high <= limit_dn + 1e-6:
+                    continue  # 一字跌停卖不出, 顺延(持有期相应延长)
+                limit_up = round(prev_c * (1 + pct), 2)
+                eff_high = min(bar.high, limit_up)  # 超涨停部分现实中不存在
+            else:
+                eff_high = bar.high
             if stop and stop > 0:
                 if bar.open <= stop:  # 跳空跌破
                     exit_price, exit_date, exit_reason = bar.open, bar.date, "stop_loss"
@@ -138,7 +173,7 @@ class Backtester:
                 if bar.open >= target:  # 跳空冲高
                     exit_price, exit_date, exit_reason = bar.open, bar.date, "target"
                     break
-                if bar.high >= target:
+                if eff_high >= target:
                     exit_price, exit_date, exit_reason = target, bar.date, "target"
                     break
             if held >= max_hold:

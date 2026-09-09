@@ -53,11 +53,11 @@ def test_metrics_profit_factor():
 
 def test_engine_entry_next_day():
     """信号次日开盘入场,防止用当日数据(无未来函数)。"""
-    bars = [_bar("2026-01-01", 10, 10, 10, 10), _bar("2026-01-02", 11, 11, 11, 11),
-            _bar("2026-01-06", 11, 12.5, 11, 12)]
+    bars = [_bar("2026-01-01", 10, 10, 10, 10), _bar("2026-01-02", 10.5, 10.6, 10.4, 10.5),
+            _bar("2026-01-06", 10.5, 11.0, 10.4, 10.8)]
     sig = Signal("X", "CN", "2026-01-01", stop_loss=9.0, target_price=12.0, holding_days=10)
     t = Backtester().run_single(sig, bars)
-    assert t is not None and t.entry_date == "2026-01-02" and t.entry_price == 11
+    assert t is not None and t.entry_date == "2026-01-02" and t.entry_price == 10.5
 
 
 def test_engine_stop_loss():
@@ -72,8 +72,8 @@ def test_engine_stop_loss():
 def test_engine_target():
     """价格触及止盈位按止盈平仓。"""
     bars = [_bar("2026-01-01", 10, 10, 10, 10), _bar("2026-01-02", 10, 10, 10, 10),
-            _bar("2026-01-05", 11, 12.5, 11, 12)]
-    sig = Signal("X", "CN", "2026-01-01", stop_loss=9.0, target_price=12.0, holding_days=10)
+            _bar("2026-01-05", 10.2, 10.9, 10.2, 10.8)]
+    sig = Signal("X", "CN", "2026-01-01", stop_loss=9.0, target_price=10.8, holding_days=10)
     t = Backtester().run_single(sig, bars)
     assert t.exit_reason == "target"
 
@@ -102,3 +102,45 @@ def test_backtest_run_aggregates():
     res = Backtester().run(sigs, {("X", "CN"): bars})
     assert len(res.trades) == 1 and res.metrics["trades"] == 1
     assert len(res.equity_curve) == 2
+
+
+# ──────────────── 涨跌停约束(2026-09-09) ────────────────
+
+def test_limit_pct_boards():
+    """板块涨跌幅: 主板10 / 创科20 / 北交所30 / 未知默认10, ST 经 overrides 传5%."""
+    from src.core.backtest.engine import limit_pct_for
+    assert limit_pct_for("600519") == 0.10
+    assert limit_pct_for("300750") == 0.20
+    assert limit_pct_for("688001") == 0.20
+    assert limit_pct_for("430047") == 0.30
+    assert limit_pct_for("X") == 0.10
+    assert limit_pct_for("600000", {"600000": 0.05}) == 0.05
+
+
+def test_engine_limit_up_entry_skipped():
+    """入场日一字涨停买不进, 整笔跳过(计 skipped)。"""
+    bars = [_bar("2026-01-01", 10, 10, 10, 10), _bar("2026-01-02", 11, 11, 11, 11),
+            _bar("2026-01-06", 11, 12, 11, 12)]
+    sig = Signal("600519", "CN", "2026-01-01", stop_loss=9.0, target_price=12.0)
+    assert Backtester().run_single(sig, bars) is None
+    res = Backtester().run([sig], {("600519", "CN"): bars})
+    assert len(res.trades) == 0 and res.skipped == 1
+
+
+def test_engine_down_lock_exit_deferred():
+    """一字跌停日卖不出(止损不触发), 顺延到下一可交易日。"""
+    bars = [_bar("2026-01-01", 10, 10, 10, 10), _bar("2026-01-02", 10, 10.1, 9.9, 10),
+            _bar("2026-01-05", 9.0, 9.0, 9.0, 9.0),   # 一字跌停(前收10→跌停9.0)
+            _bar("2026-01-06", 8.9, 9.1, 8.8, 8.9)]
+    sig = Signal("600519", "CN", "2026-01-01", stop_loss=9.5, target_price=12.0, holding_days=10)
+    t = Backtester().run_single(sig, bars)
+    assert t is not None and t.exit_reason == "stop_loss" and t.exit_date == "2026-01-06"
+
+
+def test_engine_target_capped_at_limit():
+    """超涨停价的目标位永不成交( high 按涨停封顶)。"""
+    bars = [_bar("2026-01-01", 10, 10, 10, 10), _bar("2026-01-02", 10, 10, 10, 10),
+            _bar("2026-01-05", 10.5, 11.0, 10.5, 11.0)]
+    sig = Signal("600519", "CN", "2026-01-01", stop_loss=9.0, target_price=12.0, holding_days=10)
+    t = Backtester().run_single(sig, bars)
+    assert t is not None and t.exit_reason != "target"
