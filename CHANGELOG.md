@@ -2,6 +2,10 @@
 
 ## 2026-09-10
 
+### fix
+
+- M3批量污染根因: `test_thsdk_api`裸`sys.modules.setdefault`永久污染→换monkeypatch.setitem(4处)；`test_security`同样收敛；`test_thsdk_extended`路由断言兼容FastAPI嵌套`_IncludedRouter`(经`include_context.prefix`展平)。排除集17文件合跑197过/1跳；CI排除保留(海外机房无国内网源)
+
 ### feature
 
 - M1除权除息: `corporate_actions`表(_m127+ORM)+东财分红入库(`sync_corporate_actions`)+前复权(`ex_factor`/`apply_forward_adjust`)+回测`actions`接入；口径按每股派息/每10股送转，异常因子跳过记日志

@@ -85,7 +85,7 @@ def test_p0_2_startup_check_zhitu_token(monkeypatch, tmp_path):
             def _fn(*a, **kw):
                 return None
             return _fn
-    sys.modules["marketdata.vendors.zhitu"] = _FakePool()
+    monkeypatch.setitem(sys.modules, "marketdata.vendors.zhitu", _FakePool())
 
     results = sc.run_startup_checks()
     zhitu_results = [r for r in results if r.name == "zhitu_token"]

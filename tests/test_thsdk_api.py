@@ -71,7 +71,7 @@ def test_snapshot_cache_hit(monkeypatch):
     monkeypatch.setattr(thsdk_snapshot, "get_comprehensive_snapshot", lambda s: fake, raising=False)
     # 也设置模块级属性,防御 lazy import
     import sys
-    sys.modules.setdefault("data_source.thsdk_l2", MagicMock(get_comprehensive_snapshot=lambda s: fake))
+    monkeypatch.setitem(sys.modules, "data_source.thsdk_l2", MagicMock(get_comprehensive_snapshot=lambda s: fake))
 
     out1 = thsdk_snapshot._fetch_snapshot("002361")
     out2 = thsdk_snapshot._fetch_snapshot("002361")
@@ -87,7 +87,7 @@ def test_snapshot_thsdk_failure_fallback(monkeypatch):
     thsdk_snapshot._SNAP_CACHE.clear()  # unique symbol per test
     monkeypatch.setattr(thsdk_snapshot, "get_comprehensive_snapshot", lambda s: (_ for _ in ()).throw(RuntimeError("熔断")), raising=False)
     import sys
-    sys.modules.setdefault("data_source.thsdk_l2", MagicMock(get_comprehensive_snapshot=lambda s: (_ for _ in ()).throw(RuntimeError("熔断"))))
+    monkeypatch.setitem(sys.modules, "data_source.thsdk_l2", MagicMock(get_comprehensive_snapshot=lambda s: (_ for _ in ()).throw(RuntimeError("熔断"))))
 
     out = thsdk_snapshot._fetch_snapshot("002361")
     assert out["quote"] is None
@@ -111,7 +111,7 @@ def test_snapshot_ttl_expired(monkeypatch):
 
     monkeypatch.setattr(thsdk_snapshot, "get_comprehensive_snapshot", fetch, raising=False)
     import sys
-    sys.modules.setdefault("data_source.thsdk_l2", MagicMock(get_comprehensive_snapshot=fetch))
+    monkeypatch.setitem(sys.modules, "data_source.thsdk_l2", MagicMock(get_comprehensive_snapshot=fetch))
 
     first = thsdk_snapshot._fetch_snapshot(sym)
     # 强制过期
@@ -167,7 +167,7 @@ def test_http_snapshot_endpoint(monkeypatch, client, auth_token):
     fake = {"quote": {"last": 12.5}, "depth": None, "main_flow": None, "sectors": []}
     monkeypatch.setattr(thsdk_snapshot, "get_comprehensive_snapshot", lambda s: fake, raising=False)
     import sys
-    sys.modules.setdefault("data_source.thsdk_l2", MagicMock(get_comprehensive_snapshot=lambda s: fake))
+    monkeypatch.setitem(sys.modules, "data_source.thsdk_l2", MagicMock(get_comprehensive_snapshot=lambda s: fake))
 
     resp = client.get("/api/thsdk/snapshot/002361", headers={"Authorization": f"Bearer {auth_token}"})
     assert resp.status_code == 200

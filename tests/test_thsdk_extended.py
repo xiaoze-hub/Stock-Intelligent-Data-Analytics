@@ -98,9 +98,38 @@ def test_thsdk_extended_router_registered():
         # 并行 agent(选项 C)在途改 chat.py 时 src.web.app 可能暂不可导入
         pytest.skip(f"src.web.app 暂不可导入(并行选项C在途改动?): {e}")
 
-    registered = {getattr(r, "path", None) for r in app.routes}
+    registered = _all_route_paths(app)
     for p in _EXPECTED_PATHS:
         assert p in registered, f"端点未注册: {p}"
+
+
+def _all_route_paths(app) -> set:
+    """展平 app.routes(含 FastAPI _IncludedRouter 嵌套)。"""
+    out = set()
+
+    def _walk(routes, prefix=""):
+        for r in routes:
+            orig = getattr(r, "original_router", None)
+            if orig is not None:
+                ctx = getattr(r, "include_context", None)
+                pfx = (
+                    getattr(r, "prefix", None)
+                    or (getattr(ctx, "prefix", None) if ctx else None)
+                    or getattr(orig, "prefix", "")
+                    or ""
+                )
+                _walk(getattr(orig, "routes", []), prefix + str(pfx))
+                continue
+            inner = getattr(r, "routes", None)
+            if inner:
+                _walk(inner, prefix + str(getattr(r, "prefix", "") or ""))
+                continue
+            p = getattr(r, "path", None)
+            if p:
+                out.add(prefix + str(p))
+
+    _walk(getattr(app, "routes", []))
+    return out
 
 
 # ---------- 通用端点 mock 工具 ----------
