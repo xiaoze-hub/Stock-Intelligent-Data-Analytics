@@ -28,8 +28,19 @@ _TQ_URL = (os.environ.get("TDX_QUANT_URL") or "http://172.18.0.1:5100/").rstrip(
 _TIMEOUT_S = 4.0  # 正常 <100ms; 隧道断开时快速失败交给降级链
 
 
+def _tq_enabled() -> bool:
+    """通达信客户端接口总开关(默认关闭)。开启需 PANWATCH_ENABLE_TQ=1。
+
+    默认关闭后 _rpc 快失败(不发网络请求), Engine 自动走下一源(腾讯/东财),
+    more-info 端点回 404、前/后端按“无数据”显式标注。
+    """
+    return os.environ.get("PANWATCH_ENABLE_TQ", "0") == "1"
+
+
 def _rpc(method: str, params: dict, timeout: float = _TIMEOUT_S):
     """发 JSON-RPC; 返回 result.Value 或抛异常(Engine 捕获后转下一源)。"""
+    if not _tq_enabled():
+        raise RuntimeError("TQ disabled by default (set PANWATCH_ENABLE_TQ=1 to enable)")
     body = json.dumps({"id": 1, "method": method, "params": params}, ensure_ascii=False).encode("utf-8")
     with httpx.Client(timeout=timeout) as client:
         resp = client.post(_TQ_URL, content=body, headers={"Content-Type": "application/json; charset=utf-8"})

@@ -174,8 +174,15 @@ def md_stock_data(symbols: list[str], market: str) -> list:
 
 
 def md_more_info(symbols: list[str], market: str = "CN") -> list[dict]:
-    """TQ 扩展指标(104字段), 返回 list[dict] 供 API 透传。同步。"""
-    items = get_market_data().more_info(symbols, market=market)
+    """TQ 扩展指标(104字段), 返回 list[dict] 供 API 透传。同步。
+
+    TQ 默认关闭时返回 [](API 层回 404, 前端显式标“无数据”), 不抛异常。
+    """
+    try:
+        items = get_market_data().more_info(symbols, market=market)
+    except Exception as e:  # noqa: BLE001 — TQ 关闭/隧道断开都走降级
+        logger.warning("md_more_info failed, return []: %s", e)
+        return []
     out = []
     for m in items:
         out.append({

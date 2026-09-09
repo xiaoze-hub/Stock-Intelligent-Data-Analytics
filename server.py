@@ -406,10 +406,9 @@ DATA_SOURCE_SEEDS: list[dict] = [
             "type": "kline",
             "provider": "tq",
             "config": {
-                "description": "通达信TQ本机网关(127.0.0.1:5100, 经frp隧道到小主机客户端), "
-                "前复权日K。仅CN; 隧道断开自动降级腾讯/东财。",
+                "description": "通达信TQ本机网关(默认关闭, 需显式开启: 数据源页启用+PANWATCH_ENABLE_TQ=1)。开启后前复权日K, 仅CN; 隧道断开自动降级腾讯/东财。",
             },
-            "enabled": True,
+            "enabled": False,
             "priority": 0,
             "supports_batch": False,
             "test_symbols": ["600519", "000001", "300750"],
@@ -488,10 +487,9 @@ DATA_SOURCE_SEEDS: list[dict] = [
             "type": "quote",
             "provider": "tq",
             "config": {
-                "description": "通达信TQ本机网关(127.0.0.1:5100, 经frp隧道到小主机客户端), "
-                "实时快照含内外盘。仅CN; 实测延迟<30ms, 隧道断开自动降级腾讯。",
+                "description": "通达信TQ本机网关(默认关闭, 需显式开启: 数据源页启用+PANWATCH_ENABLE_TQ=1)。开启后实时快照含内外盘, 仅CN; 隧道断开自动降级腾讯。",
             },
-            "enabled": True,
+            "enabled": False,
             "priority": 0,
             "supports_batch": False,
             "test_symbols": ["600519", "000001", "300750"],

@@ -2121,6 +2121,18 @@ CREATE TABLE IF NOT EXISTS klines (
     )
 
 
+def _m126_disable_tq_default_off(conn: Connection) -> None:
+    """通达信客户端接口默认关闭: 存量库的 tq 行一律 enabled=False。
+
+    新库由 server.py 种子 enabled=False 覆盖; 本迁移负责已存在的 data_sources 行。
+    FALSE 关键字 PG/SQLite 通用。用户在数据源页手动启用 + PANWATCH_ENABLE_TQ=1
+    后仍可使用, 本迁移只跑一次, 不覆盖用户后续手动启用(重跑时 checksum 相同跳过)。
+    """
+    if not _has_table(conn, "data_sources"):
+        return
+    conn.execute(text("UPDATE data_sources SET enabled = FALSE WHERE provider = 'tq'"))
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(101, "agent_config_kind_and_visibility", _m101_agent_config_kind),
     Migration(102, "backfill_agent_kind_data", _m102_backfill_agent_kind),
@@ -2155,6 +2167,7 @@ MIGRATIONS: tuple[Migration, ...] = (
         _m124_analysis_history_user_id_unique,
     ),
     Migration(125, "klines_table", _m125_klines_table),
+    Migration(126, "disable_tq_default_off", _m126_disable_tq_default_off),
 )
 
 

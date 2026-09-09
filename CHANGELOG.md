@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-09
+
+### update
+
+- 通达信客户端接口默认关闭: `PANWATCH_ENABLE_TQ` 总开关(默认0, `_rpc` 快失败不发请求) + 种子 `通达信TQ行情/K线 enabled=False` + `_m126` 存量库 tq 行置 disabled。开启需 env=1 且数据源页手动启用。关闭后行情/K线走腾讯/东财降级链, more-info 回404“无数据”, 决策先锋 L2 卡片 `available=False` 置灰, formula/ZLJC 返回空
+
 ## 2026-09-01
 
 ### fix
