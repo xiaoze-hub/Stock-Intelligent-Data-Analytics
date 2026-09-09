@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import and_, case, func, or_
@@ -1552,6 +1553,68 @@ def _load_latest_suggestions(limit: int = 300) -> list[StockSuggestion]:
         db.close()
 
 
+# K线摘要进程内按日缓存(M4): 同一交易日内重复扫描直接命中, 不再联网。
+# key=(market, symbol, date_str)。日期滚动自动失效, 无需 TTL 线程。
+_KLINE_SUMMARY_CACHE: dict[tuple[str, str, str], dict] = {}
+_KLINE_FETCH_WORKERS = 8
+_KLINE_FETCH_TIMEOUT_S = 20.0
+
+
+def _fetch_kline_summary_one(market: str, symbol: str) -> dict:
+    """单只 K 线摘要(worker 内执行, 实例独享防共享)。"""
+    try:
+        return KlineCollector(_to_market(market)).get_kline_summary(symbol) or {}
+    except Exception:
+        return {}
+
+
+def fetch_kline_summaries(
+    keys: list[str],
+    *,
+    snapshot_date: str,
+    max_workers: int = _KLINE_FETCH_WORKERS,
+    timeout_s: float = _KLINE_FETCH_TIMEOUT_S,
+) -> dict[str, dict]:
+    """批量 K 线摘要: 按日缓存命中则跳过, 未命中并行抓取(失败回 {})。
+
+    与旧串行逻辑同语义: 返回 {key: summary}, 异常/超时一律 {} 不抛。
+    """
+    out: dict[str, dict] = {}
+    missing: list[str] = []
+    for key in keys:
+        try:
+            market, symbol = key.split(":", 1)
+        except ValueError:
+            out[key] = {}
+            continue
+        hit = _KLINE_SUMMARY_CACHE.get((market, symbol, snapshot_date))
+        if isinstance(hit, dict):
+            out[key] = hit
+        else:
+            missing.append(key)
+    if not missing:
+        return out
+    workers = max(1, min(int(max_workers or 1), len(missing)))
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="kline-sum") as pool:
+        futs = {}
+        for key in missing:
+            market, symbol = key.split(":", 1)
+            futs[pool.submit(_fetch_kline_summary_one, market, symbol)] = key
+        for fut in as_completed(futs, timeout=(timeout_s * len(futs) if futs else None)):
+            key = futs[fut]
+            try:
+                summary = fut.result(timeout=timeout_s)
+                summary = summary if isinstance(summary, dict) else {}
+            except Exception:
+                summary = {}
+            market, symbol = key.split(":", 1)
+            _KLINE_SUMMARY_CACHE[(market, symbol, snapshot_date)] = summary
+            out[key] = summary
+    for key in missing:
+        out.setdefault(key, {})
+    return out
+
+
 def refresh_entry_candidates(
     *,
     max_inputs: int = 300,
@@ -1694,12 +1757,11 @@ def refresh_entry_candidates(
         )
         if safe_cap > 0:
             fetch_candidates = fetch_candidates[:safe_cap]
-        for key in fetch_candidates:
-            market, symbol = key.split(":", 1)
-            try:
-                kline_summary_map[key] = KlineCollector(_to_market(market)).get_kline_summary(symbol)
-            except Exception:
-                kline_summary_map[key] = {}
+        # M4: 并行抓取 + 按日缓存(同旧串行语义, 失败回 {})
+        for key, summary in fetch_kline_summaries(
+            fetch_candidates, snapshot_date=snapshot
+        ).items():
+            kline_summary_map[key] = summary
     for key in key_set:
         if key not in kline_summary_map:
             kline_summary_map[key] = {}
