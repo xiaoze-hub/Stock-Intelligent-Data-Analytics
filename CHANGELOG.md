@@ -4,6 +4,7 @@
 
 ### fix
 
+- 行情来源标注透传(原第5项TQ熔断的剩余缺口; 熔断/timeout/key轮换/metrics引擎早已有): `Quote.source` + 引擎命中回填(显式源不覆盖) + `_quote_to_row` + `/quotes` 响应 `source` 字段。前端可据此显式标注来源/无数据
 - DB日志降级: `LOG_DB_LEVEL` 默认 WARNING(原 DEBUG 全量收录), `LOG_DB_LEVEL=DEBUG` 可恢复排查；控制台 `LOG_LEVEL` 不变
 - Pydantic V2迁移: 9文件12处 `class Config` → `model_config = ConfigDict(...)`，测试零 `PydanticDeprecatedSince20` 告警
 - 回测涨跌停约束建模(原TODO): `limit_pct_for`(主板10/创科20/北交所30/ST 经 overrides 传5%) + 入场触涨停整笔跳过(计 skipped) + 一字跌停日不可卖出顺延 + 止盈 high 按涨停封顶。两个旧测试按真实约束修正(10→11精确涨停不再视为可买/12.5超涨停 high 不再触发止盈), 新增4例

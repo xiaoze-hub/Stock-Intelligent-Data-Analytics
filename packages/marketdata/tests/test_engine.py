@@ -135,3 +135,27 @@ def test_engine_passes_request_extra_to_vendor_config():
     e.fetch(Request(symbols=("x",), market="CN", limit=99, extra=(("since_days", 30),)))
     assert seen["since_days"] == 30
     assert seen["days"] == 99  # extra 透传不应破坏原有 days 注入
+
+
+def test_source_stamped_on_dict_items():
+    e = _engine({"a": FakeVendor("a", "ok")}, [SourceConfig(vendor="a", priority=1)])
+    r = e.fetch(_req())
+    assert r.ok and r.data[0]["source"] == "a"
+
+
+def test_source_stamped_on_dataclass_and_not_overwritten():
+    from marketdata.types import Quote
+
+    class QuoteVendor:
+        name = "tencent"
+        supports_markets: set = set()
+
+        def fetch(self, symbols, config):
+            return [Quote(symbol="600519", market="CN", current_price=10.0),
+                    Quote(symbol="600519", market="CN", current_price=10.0, source="manual")]
+
+    e = _engine({"tencent": QuoteVendor()}, [SourceConfig(vendor="tencent", priority=1)])
+    r = e.fetch(_req())
+    assert r.ok
+    assert r.data[0].source == "tencent"  # 空源回填
+    assert r.data[1].source == "manual"  # 显式源不覆盖

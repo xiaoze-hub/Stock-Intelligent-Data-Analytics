@@ -42,3 +42,10 @@ def test_db_config_provider_maps_rows(monkeypatch):
         ("tencent", 1, True, {"k": "v"}),
         ("yfinance", 2, True, {}),
     ]
+
+
+def test_quote_to_row_source_passthrough():
+    q = Quote(symbol="600519", market="CN", current_price=10.0, source="tencent")
+    assert mc._quote_to_row(q)["source"] == "tencent"
+    q2 = Quote(symbol="600519", market="CN", current_price=10.0)
+    assert mc._quote_to_row(q2)["source"] == ""

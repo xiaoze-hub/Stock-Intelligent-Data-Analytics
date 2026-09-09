@@ -51,6 +51,9 @@ class Quote:
     # 行情源提供的实际报价时间；无法确认时保持 None，不能用抓取时间冒充。
     quote_time: datetime | None = None
     timestamp: datetime = field(default_factory=datetime.now)
+    # 实际命中的 vendor(引擎在 fetch 成功时回填, 空则填 vendor 名)。
+    # 前端按此显式标注数据来源, 缺失时标“无数据”而非猜测。
+    source: str = ""
 
 
 @dataclass

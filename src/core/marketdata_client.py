@@ -93,6 +93,7 @@ def _quote_to_row(q: Quote) -> dict:
         "total_market_value": q.total_market_value,
         "quote_time": q.quote_time.isoformat() if q.quote_time else None,
         "quote_date": q.quote_time.date().isoformat() if q.quote_time else None,
+        "source": getattr(q, "source", "") or "",
     }
 
 

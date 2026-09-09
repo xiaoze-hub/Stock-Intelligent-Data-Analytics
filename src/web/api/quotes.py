@@ -59,6 +59,7 @@ def _quote_to_response(symbol: str, market: MarketCode, quote: dict | None) -> d
             "circulating_market_value": None,
             "quote_time": None,
             "quote_date": None,
+            "source": None,
             "daily_pnl_period": "unknown",
         }
 
@@ -84,6 +85,7 @@ def _quote_to_response(symbol: str, market: MarketCode, quote: dict | None) -> d
         "circulating_market_value": quote.get("circulating_market_value"),
         "quote_time": quote.get("quote_time"),
         "quote_date": quote_date,
+        "source": quote.get("source") or "",
         "daily_pnl_period": classify_quote_period(quote_date, market.value),
     }
 

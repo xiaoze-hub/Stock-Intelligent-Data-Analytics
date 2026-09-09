@@ -24,6 +24,21 @@ from marketdata.vendors.base import Vendor
 logger = logging.getLogger(__name__)
 
 
+def _stamp_source(data, vendor: str) -> None:
+    """命中来源回填: 空 source 填 vendor 名(dict 与 dataclass 通用)。
+
+    前端按此显式标注数据来源。已显式带源的数据不覆盖。
+    """
+    for item in data or []:
+        try:
+            if isinstance(item, dict):
+                item.setdefault("source", vendor)
+            elif not getattr(item, "source", ""):
+                item.source = vendor
+        except Exception:  # noqa: BLE001 — 标注失败不影响取数
+            pass
+
+
 class Engine:
     def __init__(self, *, datatype: str, vendors: dict[str, Vendor],
                  config: ConfigProvider, metrics: MetricsSink,
@@ -135,6 +150,7 @@ class Engine:
                     if data:
                         self.metrics.record(vendor=src.vendor, datatype=self.datatype, market=market,
                                             ok=True, count=len(data), latency_ms=latency)
+                        _stamp_source(data, src.vendor)
                         resp = Response(ok=True, data=data, vendor=src.vendor, latency_ms=latency)
                         if len(data) >= min_count:
                             ttl = cache_ttl_sec if cache_ttl_sec is not None else self.default_ttl
