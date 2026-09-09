@@ -6,8 +6,6 @@ import MinuteLwcChart from './MinuteLwcChart'
 import DarkFlowCards from './DarkFlowCards'
 import AuctionSnapshotCard from './AuctionSnapshotCard'
 
-type BusinessDay = { year: number; month: number; day: number }
-
 type KlineItem = {
   date: string
   open: number
@@ -202,26 +200,39 @@ function computeRsi(closes: number[], period = 6): Array<number | null> {
   return out
 }
 
-function getLW() {
-  return (window as any)?.LightweightCharts || null
+import type {
+  BusinessDay,
+  DeepPartial,
+  IChartApi,
+  ISeriesApi,
+  MouseEventParams,
+  SeriesMarker,
+  SeriesOptionsMap,
+  Time,
+} from 'lightweight-charts'
+import {
+  CandlestickSeries,
+  createChart,
+  createSeriesMarkers,
+  CrosshairMode,
+  HistogramSeries,
+  LineSeries,
+} from 'lightweight-charts'
+
+type CandleOptions = DeepPartial<SeriesOptionsMap['Candlestick']>
+type LineOptions = DeepPartial<SeriesOptionsMap['Line']>
+type HistOptions = DeepPartial<SeriesOptionsMap['Histogram']>
+
+function addCandles(chart: IChartApi, options: CandleOptions): ISeriesApi<'Candlestick'> {
+  return chart.addSeries(CandlestickSeries, options)
 }
 
-function addCandles(chart: any, LW: any, options: any, paneIndex?: number) {
-  if (typeof chart?.addCandlestickSeries === 'function') return chart.addCandlestickSeries(options)
-  if (typeof chart?.addSeries === 'function' && LW?.CandlestickSeries) return chart.addSeries(LW.CandlestickSeries, options, paneIndex)
-  throw new Error('Candlestick series API not available')
+function addLine(chart: IChartApi, options: LineOptions, paneIndex?: number): ISeriesApi<'Line'> {
+  return chart.addSeries(LineSeries, options, paneIndex)
 }
 
-function addLine(chart: any, LW: any, options: any, paneIndex?: number) {
-  if (typeof chart?.addLineSeries === 'function') return chart.addLineSeries(options)
-  if (typeof chart?.addSeries === 'function' && LW?.LineSeries) return chart.addSeries(LW.LineSeries, options, paneIndex)
-  throw new Error('Line series API not available')
-}
-
-function addHistogram(chart: any, LW: any, options: any, paneIndex?: number) {
-  if (typeof chart?.addHistogramSeries === 'function') return chart.addHistogramSeries(options)
-  if (typeof chart?.addSeries === 'function' && LW?.HistogramSeries) return chart.addSeries(LW.HistogramSeries, options, paneIndex)
-  throw new Error('Histogram series API not available')
+function addHistogram(chart: IChartApi, options: HistOptions, paneIndex?: number): ISeriesApi<'Histogram'> {
+  return chart.addSeries(HistogramSeries, options, paneIndex)
 }
 
 export default function InteractiveKline(props: {
@@ -232,8 +243,8 @@ export default function InteractiveKline(props: {
   /** 主力意图结构化数据(可选): 传了才在K线上画 markers/筹码叠加 */
   mainIntent?: MainIntentStructured | null
 }) {
-  const [lwReady, setLwReady] = useState(!!getLW())
-  const [libError, setLibError] = useState(false)
+  // lightweight-charts 为 npm 依赖(2026-09-09 从 CDN 改为打包引入), 库恒可用, 无需等待
+  const [lwReady] = useState(true)
   // 主力意图结构化数据(2026-08-12): 组件自取 summary API, 用于K线 markers/筹码叠加
   const [mainIntentData, setMainIntentData] = useState<MainIntentStructured | null>(null)
   const [interval, setIntervalValue] = useState<'1d' | '1w' | '1m'>(props.initialInterval || '1d')
@@ -357,28 +368,6 @@ export default function InteractiveKline(props: {
     if (props.initialInterval) setIntervalValue(props.initialInterval)
   }, [props.initialInterval, props.symbol, props.market])
 
-  useEffect(() => {
-    if (lwReady) return
-    let cancelled = false
-    const start = Date.now()
-    const t = window.setInterval(() => {
-      if (cancelled) return
-      if (getLW()) {
-        setLwReady(true)
-        clearInterval(t)
-        return
-      }
-      if (Date.now() - start > 3500) {
-        setLibError(true)
-        clearInterval(t)
-      }
-    }, 200)
-    return () => {
-      cancelled = true
-      clearInterval(t)
-    }
-  }, [lwReady])
-
   const series = useMemo(() => {
     const klines = (data || []).slice().filter(k => !!parseBusinessDay(k.date))
     const candles = klines.map(k => ({
@@ -427,8 +416,6 @@ export default function InteractiveKline(props: {
   const showSkeleton = loading && !series.klines.length
 
   useEffect(() => {
-    const LW = getLW()
-    if (!LW || !lwReady) return
     if (!containerRef.current) return
     if (!series.candles.length) return
 
@@ -442,7 +429,7 @@ export default function InteractiveKline(props: {
 
     const defaultBars = interval === '1d' ? 100 : interval === '1w' ? 78 : 72
     const defaultSpacing = interval === '1d' ? 8.5 : interval === '1w' ? 10 : 10
-    const chart = LW.createChart(container, {
+    const chart = createChart(container, {
       width: container.clientWidth,
       height: 380,
       layout: {
@@ -464,10 +451,10 @@ export default function InteractiveKline(props: {
         vertLines: { color: 'rgba(148, 163, 184, 0.08)' },
         horzLines: { color: 'rgba(148, 163, 184, 0.08)' },
       },
-      crosshair: { mode: 1 },
+      crosshair: { mode: CrosshairMode.Magnet },
     })
 
-    const candleSeries = addCandles(chart, LW, {
+    const candleSeries = addCandles(chart, {
       upColor: '#ef4444',
       downColor: '#10b981',
       borderUpColor: '#ef4444',
@@ -478,16 +465,16 @@ export default function InteractiveKline(props: {
     candleSeries.setData(series.candles)
 
     // 量能 pane 1 (v5 multi-pane, 2026-08-12 从 scaleMargins 挤压改为真 pane)
-    const volSeries = addHistogram(chart, LW, {
+    const volSeries = addHistogram(chart, {
       priceFormat: { type: 'volume' },
     }, 1)
     volSeries.setData(series.volumes)
-    const volMa5Series = addLine(chart, LW, { color: 'rgba(245, 158, 11, 0.9)', lineWidth: 1 }, 1)
-    const volMa10Series = addLine(chart, LW, { color: 'rgba(14, 165, 233, 0.9)', lineWidth: 1 }, 1)
+    const volMa5Series = addLine(chart, { color: 'rgba(245, 158, 11, 0.9)', lineWidth: 1 }, 1)
+    const volMa10Series = addLine(chart, { color: 'rgba(14, 165, 233, 0.9)', lineWidth: 1 }, 1)
 
-    const ma5Series = addLine(chart, LW, { color: 'rgba(99, 102, 241, 0.85)', lineWidth: 2 })
-    const ma10Series = addLine(chart, LW, { color: 'rgba(245, 158, 11, 0.85)', lineWidth: 2 })
-    const ma20Series = addLine(chart, LW, { color: 'rgba(14, 165, 233, 0.85)', lineWidth: 2 })
+    const ma5Series = addLine(chart, { color: 'rgba(99, 102, 241, 0.85)', lineWidth: 2 })
+    const ma10Series = addLine(chart, { color: 'rgba(245, 158, 11, 0.85)', lineWidth: 2 })
+    const ma20Series = addLine(chart, { color: 'rgba(14, 165, 233, 0.85)', lineWidth: 2 })
 
     const mapLine = (arr: Array<number | null>) =>
       series.klines
@@ -504,9 +491,9 @@ export default function InteractiveKline(props: {
     volMa10Series.setData(mapLine(series.volMa10) as any)
 
     // MACD pane 2 + RSI pane 3 (v5 multi-pane, 2026-08-12 从独立 chart + 手动 sync 改为原生多面板)
-    const macdLine = addLine(chart, LW, { color: 'rgba(99, 102, 241, 0.85)', lineWidth: 2 }, 2)
-    const sigLine = addLine(chart, LW, { color: 'rgba(14, 165, 233, 0.85)', lineWidth: 2 }, 2)
-    const hist = addHistogram(chart, LW, {
+    const macdLine = addLine(chart, { color: 'rgba(99, 102, 241, 0.85)', lineWidth: 2 }, 2)
+    const sigLine = addLine(chart, { color: 'rgba(14, 165, 233, 0.85)', lineWidth: 2 }, 2)
+    const hist = addHistogram(chart, {
       priceFormat: { type: 'price', precision: 3, minMove: 0.001 },
     }, 2)
 
@@ -540,7 +527,7 @@ export default function InteractiveKline(props: {
 
     // RSI pane 3 (开关控制)
     if (showRsi) {
-      const rsiLine = addLine(chart, LW, { color: 'rgba(234, 88, 12, 0.9)', lineWidth: 2 }, 3)
+      const rsiLine = addLine(chart, { color: 'rgba(234, 88, 12, 0.9)', lineWidth: 2 }, 3)
       const rsiData = series.klines
         .map((k, i) => {
           const v = series.rsi6[i]
@@ -558,7 +545,7 @@ export default function InteractiveKline(props: {
       // ① 主力意图箭头: 标在最后一根K线上 (买↑红 / 派发↓绿 / 洗盘吸筹↑橙 / 平衡)
       if (series.klines.length) {
         const lastK = series.klines[series.klines.length - 1]
-        const markers: any[] = []
+        const markers: SeriesMarker<Time>[] = []
         const d = mainIntent.direction
         if (d === 'buy') {
           markers.push({
@@ -626,12 +613,8 @@ export default function InteractiveKline(props: {
           }
         }
         if (markers.length) {
-          // LWC v5: setMarkers 已移除, 改用顶级 createSeriesMarkers(series, markers)
-          if (typeof candleSeries.setMarkers === 'function') {
-            candleSeries.setMarkers(markers)
-          } else if (typeof LW.createSeriesMarkers === 'function') {
-            LW.createSeriesMarkers(candleSeries, markers)
-          }
+          // v5 唯一写法: 顶级 createSeriesMarkers(series, markers)
+          createSeriesMarkers(candleSeries, markers)
         }
       }
       // ③ 筹码叠加: 筹码峰 + 成本带上/下沿画在价格 pane
@@ -666,7 +649,7 @@ export default function InteractiveKline(props: {
     }
 
     // v5 多面板共用 X 轴, 无需手动同步可见范围(2026-08-12 移除旧版独立 chart sync)
-    chart.subscribeCrosshairMove?.((param: any) => {
+    chart.subscribeCrosshairMove((param: MouseEventParams) => {
       const point = param?.point
       const dateKey = parseCrosshairDateKey(param?.time)
       if (!point || !dateKey || !series.klines.length) {
@@ -906,12 +889,6 @@ export default function InteractiveKline(props: {
       {error ? (
         <div className="text-[12px] text-rose-600 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2 mb-3">
           {error}
-        </div>
-      ) : null}
-
-      {!lwReady && libError ? (
-        <div className="text-[12px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-3">
-          图表库加载失败（网络受限时可能发生）。可稍后重试或检查网络/代理。
         </div>
       ) : null}
 

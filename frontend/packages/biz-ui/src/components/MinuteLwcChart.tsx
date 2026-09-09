@@ -1,4 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
+import type {
+  DeepPartial,
+  IChartApi,
+  ISeriesApi,
+  MouseEventParams,
+  SeriesMarker,
+  SeriesOptionsMap,
+  Time,
+  UTCTimestamp,
+} from 'lightweight-charts'
+import {
+  createChart,
+  createSeriesMarkers,
+  CrosshairMode,
+  HistogramSeries,
+  LineSeries,
+} from 'lightweight-charts'
 import type { MinuteSwings } from './InteractiveKline'
 
 export interface MinutePoint {
@@ -41,20 +58,15 @@ interface SwingMark {
   spread?: number
 }
 
-function getLW(): any {
-  return (window as any)?.LightweightCharts || null
+type LineOptions = DeepPartial<SeriesOptionsMap['Line']>
+type HistOptions = DeepPartial<SeriesOptionsMap['Histogram']>
+
+function addLineSeries(chart: IChartApi, options: LineOptions): ISeriesApi<'Line'> {
+  return chart.addSeries(LineSeries, options)
 }
 
-function addLineSeries(chart: any, LW: any, options: any, paneIndex?: number) {
-  if (typeof chart?.addLineSeries === 'function') return chart.addLineSeries(options)
-  if (typeof chart?.addSeries === 'function' && LW?.LineSeries) return chart.addSeries(LW.LineSeries, options, paneIndex)
-  throw new Error('Line series API not available')
-}
-
-function addHistogramSeries(chart: any, LW: any, options: any, paneIndex?: number) {
-  if (typeof chart?.addHistogramSeries === 'function') return chart.addHistogramSeries(options)
-  if (typeof chart?.addSeries === 'function' && LW?.HistogramSeries) return chart.addSeries(LW.HistogramSeries, options, paneIndex)
-  throw new Error('Histogram series API not available')
+function addHistogramSeries(chart: IChartApi, options: HistOptions, paneIndex?: number): ISeriesApi<'Histogram'> {
+  return chart.addSeries(HistogramSeries, options, paneIndex)
 }
 
 /** "0930" -> UTC 当天 09:30 的时间戳(秒)。LWC 内部用 UTC, 必须统一避免 8h 时差。 */
@@ -80,9 +92,8 @@ export default function MinuteLwcChart({ points, prevClose, isIndex, swings }: P
   const [showLegend, setShowLegend] = useState(true)
 
   useEffect(() => {
-    const LW = getLW()
     const el = ref.current
-    if (!LW || !el || !points.length) return
+    if (!el || !points.length) return
 
     const rootStyle = getComputedStyle(document.documentElement)
     const bg = rootStyle.getPropertyValue('--card').trim()
@@ -92,7 +103,7 @@ export default function MinuteLwcChart({ points, prevClose, isIndex, swings }: P
     const colorDown = '#10b981'
     const prevC = prevClose ?? points[0]?.price ?? 0
 
-    const chart = LW.createChart(el, {
+    const chart = createChart(el, {
       width: el.clientWidth,
       height: 300,
       layout: {
@@ -107,7 +118,7 @@ export default function MinuteLwcChart({ points, prevClose, isIndex, swings }: P
         barSpacing: 6,
         minBarSpacing: 1,
         // 2026-08-12 用户反馈: 底部时间轴显示"12日"太粗 → 改成 HH:MM 分钟格式
-        tickMarkFormatter: (time: any) => {
+        tickMarkFormatter: (time: Time) => {
           const d = new Date((typeof time === 'number' ? time : 0) * 1000)
           return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
         },
@@ -118,7 +129,7 @@ export default function MinuteLwcChart({ points, prevClose, isIndex, swings }: P
         vertLines: { color: 'rgba(148, 163, 184, 0.08)' },
         horzLines: { color: 'rgba(148, 163, 184, 0.08)' },
       },
-      crosshair: { mode: 1 },
+      crosshair: { mode: CrosshairMode.Magnet },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
       handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
     })
@@ -128,12 +139,12 @@ export default function MinuteLwcChart({ points, prevClose, isIndex, swings }: P
     const first = points[0]?.price ?? 0
     const priceColor = last >= first ? colorUp : colorDown
 
-    const priceSeries = addLineSeries(chart, LW, {
+    const priceSeries = addLineSeries(chart, {
       color: priceColor,
       lineWidth: 2,
       priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
     })
-    priceSeries.setData(points.map(p => ({ time: hhmmToTs(p.t), value: p.price })))
+    priceSeries.setData(points.map(p => ({ time: hhmmToTs(p.t) as UTCTimestamp, value: p.price })))
 
     // 2026-08-12 用户反馈: 分时波动幅度太小没视觉冲击 → Y轴紧凑化。
     // 券商风格: 以价格线自身为中心对称缩放(半幅=实际波动半幅 或 昨收0.8% 取大, 留15%余量),
@@ -159,12 +170,12 @@ export default function MinuteLwcChart({ points, prevClose, isIndex, swings }: P
     }
 
     if (!isIndex) {
-      const avgSeries = addLineSeries(chart, LW, {
+      const avgSeries = addLineSeries(chart, {
         color: 'rgba(245, 158, 11, 0.95)',
         lineWidth: 1,
         priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
       })
-      avgSeries.setData(points.map(p => ({ time: hhmmToTs(p.t), value: p.avg })))
+      avgSeries.setData(points.map(p => ({ time: hhmmToTs(p.t) as UTCTimestamp, value: p.avg })))
     }
 
     // 昨收虚线 = ±分界线(红线上方=涨, 下方=跌)
@@ -225,17 +236,17 @@ export default function MinuteLwcChart({ points, prevClose, isIndex, swings }: P
 
     if (marks.length) {
       // 主力标记: 拉升红↑ / 下探绿↓ / 横盘灰紫■(2026-08-12)
-      const mainMarkers: any[] = marks.map(m => {
+      const mainMarkers: SeriesMarker<Time>[] = marks.map(m => {
         if (m.kind === 'flat') {
           // 横盘段: 方形标记, 托盘出货=紫 / 压盘吸筹=青 / 对倒=灰
           const flatColor = m.verdict.includes('出货') ? '#8b5cf6'
             : m.verdict.includes('吸筹') ? '#06b6d4'
             : '#94a3b8'
           return {
-            time: m.time,
-            position: 'belowBar',
+            time: m.time as UTCTimestamp,
+            position: 'belowBar' as const,
             color: flatColor,
-            shape: 'square',
+            shape: 'square' as const,
             text: fmtWan(m.main_net),
             size: 1,
           }
@@ -245,11 +256,13 @@ export default function MinuteLwcChart({ points, prevClose, isIndex, swings }: P
           ? (m.verdict.includes('放量上涨') || m.verdict.includes('疑似真拉升'))
           : (m.verdict.includes('放量下杀') || m.verdict.includes('疑似出货'))
         const base = isRally ? '#f43f5e' : '#10b981'
+        const position = (isRally ? 'belowBar' : 'aboveBar') as 'belowBar' | 'aboveBar'
+        const shape = (isRally ? 'arrowUp' : 'arrowDown') as 'arrowUp' | 'arrowDown'
         return {
-          time: m.time,
-          position: isRally ? 'belowBar' : 'aboveBar',
+          time: m.time as UTCTimestamp,
+          position,
           color: confirmed ? base : `${base}88`,
-          shape: isRally ? 'arrowUp' : 'arrowDown',
+          shape,
           text: fmtWan(m.main_net),
           size: 1,
         }
@@ -257,33 +270,29 @@ export default function MinuteLwcChart({ points, prevClose, isIndex, swings }: P
       // 散户圆点(橙●=散户净买追涨 / 蓝●=散户净卖抛压; 与主力标记相反侧)
       // 2026-08-12 用户确认: 散户单笔本就<20万, 不再过滤——每个段都显示散户净额,
       // 让"主力拉升+散户没追/散户在抛"的对比完整可见。
-      const retailMarkers: any[] = marks.map(m => {
+      const retailMarkers: SeriesMarker<Time>[] = marks.map(m => {
         const net = m.retail_net ?? 0
         const isBuy = net > 0
+        const position = (m.kind === 'rally' ? 'aboveBar' : 'belowBar') as 'aboveBar' | 'belowBar'
         return {
-          time: m.time,
-          position: m.kind === 'rally' ? 'aboveBar' : 'belowBar',  // 与主力标记相反侧
+          time: m.time as UTCTimestamp,
+          position,  // 与主力标记相反侧
           color: isBuy ? '#f59e0b' : '#3b82f6',  // 黄=散户买(追) / 蓝=散户卖(抛)
-          shape: 'circle',
+          shape: 'circle' as const,
           text: fmtWan(net),
           size: 0,
         }
       })
       const allMarkers = [...mainMarkers, ...retailMarkers]
       if (allMarkers.length) {
-        // LWC v5: setMarkers 已移除, 改用顶级 createSeriesMarkers(series, markers)
-        if (typeof priceSeries.setMarkers === 'function') {
-          priceSeries.setMarkers(allMarkers)
-        } else if (typeof LW.createSeriesMarkers === 'function') {
-          LW.createSeriesMarkers(priceSeries, allMarkers)
-        }
+        createSeriesMarkers(priceSeries, allMarkers)
       }
       setSwingMarks(marks)  // 供 tooltip/图例
     }
 
     // ═══ 悬停 tooltip(2026-08-12 v3): crosshair 移动时找最近的段标记, 显示完整分析
     if (marks.length) {
-      chart.subscribeCrosshairMove?.((param: any) => {
+      chart.subscribeCrosshairMove((param: MouseEventParams) => {
         const point = param?.point
         if (!point || !param?.time) {
           setHoverMark(null)
@@ -327,12 +336,12 @@ export default function MinuteLwcChart({ points, prevClose, isIndex, swings }: P
 
     // 量能柱(pane 1): v5 multi-pane, 必须指定 paneIndex=1,
     // 否则成交量柱画在 pane 0 盖住价格线(2026-08-12 用户反馈"像成交量一样的东西")
-    const volSeries = addHistogramSeries(chart, LW, {
+    const volSeries = addHistogramSeries(chart, {
       priceFormat: { type: 'volume' },
     }, 1)
     volSeries.setData(
       points.map(p => ({
-        time: hhmmToTs(p.t),
+        time: hhmmToTs(p.t) as UTCTimestamp,
         value: p.volume,
         color: p.price >= prevC ? 'rgba(239, 68, 68, 0.4)' : 'rgba(16, 185, 129, 0.4)',
       }))

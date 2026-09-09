@@ -7,6 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "echarts": "^6.1.0"
+    "echarts": "^6.1.0",
+    "lightweight-charts": "5.2.1"
   }
 }
