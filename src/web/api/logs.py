@@ -3,7 +3,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, or_
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from src.web.database import get_db
@@ -56,8 +56,7 @@ class LogEntryResponse(BaseModel):
     notify_status: str = ""
     notify_reason: str = ""
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class LogListResponse(BaseModel):

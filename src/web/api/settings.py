@@ -2,7 +2,7 @@ import base64
 import os
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from src.web.database import get_db
 from src.web.models import AppSettings
@@ -42,8 +42,7 @@ class SettingResponse(BaseModel):
     value: str
     description: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # 配置项描述

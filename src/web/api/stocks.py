@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from src.web.database import get_db
 from src.web.api.auth import get_current_user
@@ -54,8 +54,7 @@ class StockResponse(BaseModel):
     sort_order: int
     agents: list[StockAgentInfo] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class StockAgentItem(BaseModel):

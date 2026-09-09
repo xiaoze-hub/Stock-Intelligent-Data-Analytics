@@ -155,7 +155,8 @@ def setup_logging():
     分级策略:
     - root logger 始终 DEBUG,所有日志都会传播到 handler
     - 控制台 handler 按 LOG_LEVEL 过滤(默认 INFO),并丢弃 httpx 等三方库的 < WARNING 噪音
-    - DB handler 始终 DEBUG 全量收录,UI 日志板永远可以看到包括心跳/httpx 请求在内的完整记录
+    - DB handler 按 LOG_DB_LEVEL 过滤(默认 WARNING, 防 log_entries 表膨胀;
+      排查时设 LOG_DB_LEVEL=DEBUG 恢复全量收录),UI 日志板看错误/告警
     """
     console_level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
     console_level = getattr(logging, console_level_name, logging.INFO)
@@ -185,8 +186,9 @@ def setup_logging():
     )
     root.addHandler(console)
 
-    # 数据库持久化: 始终全量收录,UI 日志板可查 DEBUG
-    db_handler = DBLogHandler(level=logging.DEBUG)
+    # 数据库持久化: 默认只收 WARNING+(防表膨胀), 排查时 LOG_DB_LEVEL=DEBUG 恢复全量
+    db_level_name = os.environ.get("LOG_DB_LEVEL", "WARNING").upper()
+    db_handler = DBLogHandler(level=getattr(logging, db_level_name, logging.WARNING))
     db_handler.setFormatter(logging.Formatter("%(message)s"))
     root.addHandler(db_handler)
 
@@ -202,7 +204,7 @@ def setup_logging():
 
 class _ConsoleNoiseFilter(logging.Filter):
     """控制台 handler 过滤器: 三方库的 INFO/DEBUG 不进 stdout,WARNING+ 仍然显示。
-    DB handler 不挂这个过滤器,UI 日志板能看到完整请求记录。
+    DB handler 不挂这个过滤器, 按自身 LOG_DB_LEVEL(默认 WARNING)收录。
 
     uvicorn.access 是每条请求的 access log(`INFO: 127.0.0.1 - "GET /api/..." 200 OK`),
     属于底层心跳;uvicorn / uvicorn.error 是应用级日志(启动、报错),保留。"""

@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from src.web.database import get_db
 from src.web.models import AnalysisHistory, User
@@ -67,8 +67,7 @@ class HistoryResponse(BaseModel):
     created_at: str
     updated_at: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.get("")

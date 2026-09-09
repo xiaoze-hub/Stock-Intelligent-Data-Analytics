@@ -4,7 +4,7 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from src.web.database import get_db
 from src.web.api.auth import get_current_user
@@ -64,8 +64,7 @@ class ChannelResponse(BaseModel):
     enabled: bool
     is_default: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.get("", response_model=list[ChannelResponse])

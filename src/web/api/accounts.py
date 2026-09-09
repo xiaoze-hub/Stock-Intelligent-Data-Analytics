@@ -6,7 +6,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from datetime import datetime, timedelta, timezone
 
@@ -111,8 +111,7 @@ class AccountResponse(BaseModel):
     available_funds: float
     enabled: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PositionCreate(BaseModel):
@@ -145,8 +144,7 @@ class PositionResponse(BaseModel):
     stock_symbol: str | None = None
     stock_name: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PositionReorderItem(BaseModel):

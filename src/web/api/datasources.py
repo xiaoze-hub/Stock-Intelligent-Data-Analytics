@@ -3,7 +3,7 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from src.web.database import get_db
 from src.web.models import DataSource
@@ -66,8 +66,7 @@ class DataSourceResponse(BaseModel):
     supports_batch: bool = False
     test_symbols: list[str] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # 已接入 marketdata 新引擎的数据类型(随各类型逐步迁移扩充)

@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from src.web.database import get_db
 from src.web.models import AgentConfig, AgentRun, LogEntry, User
@@ -226,8 +226,7 @@ class AgentConfigResponse(BaseModel):
     notify_channel_ids: list[int]
     config: dict
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AgentRunResponse(BaseModel):
@@ -245,8 +244,7 @@ class AgentRunResponse(BaseModel):
     duration_ms: int
     created_at: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.get("", response_model=list[AgentConfigResponse])

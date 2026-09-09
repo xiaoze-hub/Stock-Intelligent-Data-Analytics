@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from src.web.database import get_db
 from src.web.models import AIService, AIModel, AISceneBinding
@@ -165,8 +165,7 @@ class ModelResponse(BaseModel):
     def _validate_capabilities(cls, v):
         return _parse_capabilities(v)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ServiceResponse(BaseModel):
@@ -176,8 +175,7 @@ class ServiceResponse(BaseModel):
     api_key: str
     models: list[ModelResponse] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.get("/services", response_model=list[ServiceResponse])
