@@ -106,3 +106,34 @@ def test_slow_leader_waiter_fallback_progress(cache, monkeypatch):
     assert dt < 1.5, f"waiter 被卡住: {dt:.2f}s"
     t_leader.join(timeout=10)
     assert leader_out == [{"v": "slow"}]
+
+
+def test_stale_fallback_on_fetch_failure(cache):
+    """有快照 + 回源失败 → 返回旧值不断档。"""
+    cache.get_or_fetch("sf:stale1", ttl=60, fetch=lambda: {"v": 1})
+
+    def boom():
+        raise RuntimeError("上游挂了")
+
+    # L1 过期(直接删 L1 模拟过期, stale 保留)
+    with cache._lock:
+        cache._l1.pop("sf:stale1", None)
+    assert cache.get_or_fetch("sf:stale1", ttl=60, fetch=boom) == {"v": 1}
+
+
+def test_no_stale_still_raises(cache):
+    """无快照 + 回源失败 → 照样向上抛。"""
+    import pytest as _pytest
+
+    with _pytest.raises(RuntimeError):
+        cache.get_or_fetch("sf:nostale", ttl=60, fetch=lambda: (_ for _ in ()).throw(RuntimeError("挂")))
+
+
+def test_delete_clears_stale(cache):
+    """delete 连 stale 一起清, 之后失败不再回旧值。"""
+    import pytest as _pytest
+
+    cache.get_or_fetch("sf:del1", ttl=60, fetch=lambda: {"v": 1})
+    cache.delete("sf:del1")
+    with _pytest.raises(RuntimeError):
+        cache.get_or_fetch("sf:del1", ttl=60, fetch=lambda: (_ for _ in ()).throw(RuntimeError("挂")))

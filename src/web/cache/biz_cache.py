@@ -46,6 +46,8 @@ _KEY_PREFIX = "biz:"
 
 # 单飞去重: 同 key 并发 miss 只放 1 个上游请求, waiter 最长等待(秒)
 _SINGLEFLIGHT_WAIT_S = 30.0
+# stale 快照上限(防无限膨胀, 超了淘汰最早写入的 key)
+_STALE_MAX_KEYS = 2000
 
 
 class BizCache:
@@ -57,6 +59,8 @@ class BizCache:
         self._l1: dict[str, tuple[float, Any]] = {}  # key -> (expires_at, value)
         self._lock = threading.Lock()
         self._inflight: dict[str, threading.Event] = {}  # singleflight: key -> 完成事件
+        # OT-Phase5 stale 回退: 每次写入同时留一份不过期快照, 上游挂时不断档
+        self._stale: dict[str, Any] = {}
         self._redis: Any = None
         self._redis_attempted = False
         self._redis_next_attempt = 0.0
@@ -138,11 +142,14 @@ class BizCache:
             return None
 
     def set_json(self, key: str, value: Any, ttl: int | None = None) -> bool:
-        """写 L1 + 尽力写 L2(失败不影响主流程)。"""
+        """写 L1 + 尽力写 L2(失败不影响主流程)。同时留 stale 快照。"""
         now = time.monotonic()
         expires_at = now + (ttl if ttl and ttl > 0 else 60.0)
         with self._lock:
             self._l1[key] = (expires_at, value)
+            self._stale[key] = value
+            while len(self._stale) > _STALE_MAX_KEYS:
+                self._stale.pop(next(iter(self._stale)))
 
         r = self._ensure_redis()
         if r is None:
@@ -168,11 +175,14 @@ class BizCache:
         """缓存穿透封装: 命中直接返回; miss 调 fetch() 回填后返回。
 
         注意: fetch 必须是同步可调用(在 to_thread / 同步上下文跑)。
-        fetch 抛异常直接向上抛(调用方自己决定 fallback 策略)。
 
         单飞去重(P1): 同 key 并发 miss 只有 leader 调 fetch, waiter 等待
         事件后重读缓存; leader 超时未回填 waiter 自己抓一次(极端边沿,
         保证进度, 不死锁)。
+
+        stale 回退(OT-Phase5): miss 且 fetch 抛异常时, 有 stale 快照就
+        返回旧值(记 warning, 不断档); 无快照才向上抛。调用方如需区分
+        新旧, 请用短 TTL + asof 字段, 不要依赖本函数辨新旧。
         """
         cached = self.get_json(key)
         if cached is not None:
@@ -190,7 +200,14 @@ class BizCache:
             cached = self.get_json(key)
             if cached is not None:
                 return cached
-            value = fetch()
+            try:
+                value = fetch()
+            except Exception:
+                stale = self._stale_get(key)
+                if stale is not None:
+                    logger.warning(f"[biz-cache] {key} 回源失败, 返回 stale 快照")
+                    return stale
+                raise
             if value is not None:
                 self.set_json(key, value, ttl=ttl)
             return value
@@ -200,6 +217,10 @@ class BizCache:
             with self._lock:
                 self._inflight.pop(key, None)
             ev.set()
+            stale = self._stale_get(key)
+            if stale is not None:
+                logger.warning(f"[biz-cache] {key} 回源失败, 返回 stale 快照")
+                return stale
             raise
         with self._lock:
             self._inflight.pop(key, None)
@@ -208,11 +229,17 @@ class BizCache:
         ev.set()
         return value
 
+    def _stale_get(self, key: str) -> Optional[Any]:
+        """取 stale 快照(无过期概念, 没有返回 None)。"""
+        with self._lock:
+            return self._stale.get(key)
+
     def delete(self, *keys: str) -> int:
-        """删 L1 + L2。"""
+        """删 L1 + L2 + stale 快照。"""
         with self._lock:
             for k in keys:
                 self._l1.pop(k, None)
+                self._stale.pop(k, None)
         r = self._ensure_redis()
         if r is None or not keys:
             return 0
@@ -226,6 +253,7 @@ class BizCache:
         """清空业务缓存: L1 直接清; L2 用 SCAN 只删 biz:* 前缀(不 flushdb 误伤限流/stream)。"""
         with self._lock:
             self._l1.clear()
+            self._stale.clear()
         r = self._ensure_redis()
         if r is None:
             return
