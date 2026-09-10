@@ -159,3 +159,83 @@ def test_source_stamped_on_dataclass_and_not_overwritten():
     assert r.ok
     assert r.data[0].source == "tencent"  # 空源回填
     assert r.data[1].source == "manual"  # 显式源不覆盖
+
+
+# ──────────── OT-Phase4: vendor 失败冷却 + 礼貌并发 ────────────
+class CountingVendor:
+    """计数 vendor，可按调用次数切换行为。"""
+
+    def __init__(self, name, fails_first_n=0, delay=0.0):
+        self.name = name
+        self.supports_markets = set()
+        self.calls = 0
+        self.fails_first_n = fails_first_n
+        self.delay = delay
+        self.inflight = 0
+        self.max_inflight = 0
+
+    def fetch(self, symbols, config):
+        import threading as _t
+        import time as _time
+
+        self.calls += 1
+        self.inflight += 1
+        self.max_inflight = max(self.max_inflight, self.inflight)
+        try:
+            if self.delay:
+                _time.sleep(self.delay)
+            if self.calls <= self.fails_first_n:
+                raise RuntimeError("boom")
+            return [{"symbol": symbols[0].code, "v": self.name}]
+        finally:
+            self.inflight -= 1
+
+
+def _req_sym(sym):
+    from marketdata.types import Request
+
+    return Request(symbols=(sym,), market="CN")
+
+
+def test_vendor_cooldown_skips_failed():
+    """vendor 抛异常后 60s 内不再被打扰(第二次 fetch 零新调用)。"""
+    v = CountingVendor("a", fails_first_n=99)
+    e = _engine({"a": v}, [SourceConfig(vendor="a", priority=1)])
+    assert e.fetch(_req()).ok is False
+    assert v.calls == 1
+    assert "a" in e._vendor_cooldown_until
+    assert e.fetch(_req()).ok is False
+    assert v.calls == 1, "冷却期内又打了失败源"
+
+
+def test_cooldown_expires_then_retries():
+    """冷却过期后恢复尝试。"""
+    import time as _time
+
+    v = CountingVendor("a", fails_first_n=1)
+    e = _engine({"a": v}, [SourceConfig(vendor="a", priority=1)])
+    assert e.fetch(_req()).ok is False
+    e._vendor_cooldown_until["a"] = _time.monotonic() - 1
+    r = e.fetch(_req())
+    assert v.calls == 2 and r.ok and r.vendor == "a"
+
+
+def test_concurrency_limit_per_vendor():
+    """4 线程并发只压同一 vendor，峰值在限额内且全部成功。"""
+    import threading as _t
+
+    v = CountingVendor("a", delay=0.3)
+    e = _engine({"a": v}, [SourceConfig(vendor="a", priority=1)])
+    outs, threads = [], []
+
+    def worker(i):
+        outs.append(e.fetch(_req_sym(f"6005{i:02d}")))
+
+    for i in range(4):
+        t = _t.Thread(target=worker, args=(i,))
+        threads.append(t)
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+    assert all(r.ok for r in outs)
+    assert v.max_inflight <= 2, f"并发超限: {v.max_inflight}"

@@ -56,6 +56,13 @@ class Engine:
         # (CHANGELOG 事故: 5 源串联 24s 全阻塞)。超时线程无法强杀, 由共享池自然回收;
         # MARKETDATA_VENDOR_TIMEOUT 可配(默认 8s)。
         self.vendor_timeout_sec = float(os.getenv("MARKETDATA_VENDOR_TIMEOUT", "8"))
+        # OT-Phase4: vendor 级失败冷却 + 礼貌并发(借鉴 OpenTerminal Yahoo provider)。
+        # 单个 vendor 抛异常/超时后冷却 N 秒不再选中(直接走下一源); 失败的是 key
+        # 才换 key, vendor 本体故障才冷却。并发上限防多账号同时打爆同一上游。
+        self.vendor_cooldown_sec = float(os.getenv("MARKETDATA_VENDOR_COOLDOWN", "60"))
+        self.vendor_max_concurrency = int(os.getenv("MARKETDATA_VENDOR_CONCURRENCY", "2"))
+        self._vendor_cooldown_until: dict[str, float] = {}
+        self._vendor_sems: dict[str, threading.Semaphore] = {}
         self._executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=4, thread_name_prefix="md-vendor"
         )
@@ -73,6 +80,17 @@ class Engine:
                 kp = KeyPool(list(key_pool))
                 self._keypools[vendor] = kp
             return kp
+
+    def _vendor_sem_for(self, vendor: str) -> threading.Semaphore:
+        with self._kp_lock:
+            sem = self._vendor_sems.get(vendor)
+            if sem is None:
+                sem = threading.Semaphore(max(1, self.vendor_max_concurrency))
+                self._vendor_sems[vendor] = sem
+            return sem
+
+    def _mark_vendor_failure(self, vendor: str) -> None:
+        self._vendor_cooldown_until[vendor] = time.monotonic() + self.vendor_cooldown_sec
 
     def fetch(self, req: Request, *, cache_ttl_sec: float | None = None, min_count: int = 1) -> Response:
         key = req.cache_key(self.datatype)
@@ -94,6 +112,10 @@ class Engine:
                 continue
             if vendor.supports_markets and market not in vendor.supports_markets:
                 continue
+            # OT-Phase4: 冷却期内跳过(直接走下一源, 不计数不打扰)
+            if self._vendor_cooldown_until.get(src.vendor, 0.0) > time.monotonic():
+                logger.debug(f"[marketdata/{self.datatype}] vendor={src.vendor} 冷却中, 跳过")
+                continue
 
             kp = self._get_keypool(src.vendor, src.key_pool)
             # 多 key 池: 逐个 key 尝试, 限流自动切下一个
@@ -110,6 +132,15 @@ class Engine:
                 call_config = {**base_cfg, "days": req.limit, **dict(req.extra)}
 
                 t0 = time.monotonic()
+                # OT-Phase4: 礼貌并发, 拿不到名额 1s 内直接让路给下一源(不阻塞 failover)
+                sem = self._vendor_sem_for(src.vendor)
+                if not sem.acquire(timeout=1.0):
+                    latency = int((time.monotonic() - t0) * 1000)
+                    last_err = f"vendor busy (concurrency limit {self.vendor_max_concurrency})"
+                    logger.warning(f"[marketdata/{self.datatype}] vendor={src.vendor} BUSY 让路")
+                    self.metrics.record(vendor=src.vendor, datatype=self.datatype, market=market,
+                                        ok=False, count=0, latency_ms=latency, error=last_err)
+                    break
                 try:
                     fut = self._executor.submit(vendor.fetch, syms, call_config)
                     data = fut.result(timeout=self.vendor_timeout_sec)
@@ -119,6 +150,7 @@ class Engine:
                     err = f"vendor timeout after {self.vendor_timeout_sec}s"
                     if kp and api_key:
                         kp.mark_failure(api_key, rate_limited=False)
+                    self._mark_vendor_failure(src.vendor)
                     self.metrics.record(vendor=src.vendor, datatype=self.datatype, market=market,
                                         ok=False, count=0, latency_ms=latency, error=err)
                     last_err = err
@@ -135,6 +167,9 @@ class Engine:
                     )
                     if kp and api_key:
                         kp.mark_failure(api_key, rate_limited=rl)
+                    if not (kp and rl):
+                        # key 级可切换的限流不算 vendor 本体故障; 其他异常才冷却
+                        self._mark_vendor_failure(src.vendor)
                     self.metrics.record(vendor=src.vendor, datatype=self.datatype, market=market,
                                         ok=False, count=0, latency_ms=latency, error=err)
                     last_err = err
@@ -148,6 +183,7 @@ class Engine:
                     if kp and api_key:
                         kp.mark_success(api_key)
                     if data:
+                        self._vendor_cooldown_until.pop(src.vendor, None)
                         self.metrics.record(vendor=src.vendor, datatype=self.datatype, market=market,
                                             ok=True, count=len(data), latency_ms=latency)
                         _stamp_source(data, src.vendor)
@@ -164,6 +200,8 @@ class Engine:
                         last_err = "empty"
                     success = True
                     break  # 该源已成功取数(即使不足 min_count, 也走 best 候选逻辑)
+                finally:
+                    sem.release()
             if success:
                 continue
 
