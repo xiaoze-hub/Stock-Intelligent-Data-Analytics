@@ -5,7 +5,7 @@
 **开源 A 股 AI 投研终端** — 行情数据 → 多智能体 AI 分析 → 基础模型预测 → 自我验证闭环 → 微信推送，一个自托管系统全打通。
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-v0.4.37-green)
+![Version](https://img.shields.io/badge/version-v0.4.38-green)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue?logo=docker)](https://github.com/xiaoze-hub/Stock-Intelligent-Data-Analytics/pkgs/container/stock-intelligent-data-analytics)
 
 *语言：[English](README.md) · [中文](README.zh-CN.md)*
@@ -69,7 +69,7 @@ SIDA 不重复造轮子 — 把经过验证的开源项目整合成一条流水�
 ```bash
 # GitHub 源(全球)或阿里云 ACR(国内加速)
 docker pull ghcr.io/xiaoze-hub/stock-intelligent-data-analytics:latest
-# 或: docker pull crpi-mte80ai8o78b1429.cn-shanghai.personal.cr.aliyuncs.com/xiaozexwz/xzxwz:v0.4.37
+# 或: docker pull crpi-mte80ai8o78b1429.cn-shanghai.personal.cr.aliyuncs.com/xiaozexwz/xzxwz:v0.4.38
 
 docker run -d --name sida -p 8000:8000 --restart unless-stopped \
   -v sida_data:/app/data \
@@ -135,7 +135,7 @@ cd frontend && pnpm install && pnpm dev
 腾讯 / 东财 / 同花顺 / 新浪 / 通达信（问小达）/ 巨潮（互动易）— 行情、K线、分时、资金流、逐笔成交、竞价、涨停池、热门板块、龙虎榜、两融等。免费数据源，无需付费 Key。
 
 - 每笔行情自带命中来源 `source`（如 `tencent`），前端按此标注数据出处，不猜测。
-- 通达信TQ客户端网关自 v0.4.37 起**默认关闭**（需本机客户端＋网关）。开启需 `PANWATCH_ENABLE_TQ=1` 并在数据源页手动启用；关闭后行情/K线自动走腾讯/东财降级链。
+- 通达信TQ客户端网关自 v0.4.38 起**默认关闭**（需本机客户端＋网关）。开启需 `PANWATCH_ENABLE_TQ=1` 并在数据源页手动启用；关闭后行情/K线自动走腾讯/东财降级链。
 
 ## 免责声明
 
