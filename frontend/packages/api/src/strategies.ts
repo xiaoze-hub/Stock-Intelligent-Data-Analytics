@@ -74,8 +74,31 @@ export interface ScanResult {
   message?: string
 }
 
+/** L1 周滚动 HitRate 榜(2026-09-10): GET /api/strategies/hitrate-board */
+export interface HitrateRow {
+  strategy_code: string
+  horizon_days: number
+  n: number
+  hits: number
+  hit_rate: number
+  target_rate: number
+  stop_rate: number
+  avg_ret: number | null
+  status: string
+}
+
+export interface HitrateBoard {
+  asof: string
+  window_days: number
+  hit_def: string
+  rows: HitrateRow[]
+}
+
 export const strategiesApi = {
   list: () => fetchAPI<StrategyListResponse>(`/strategies/list`),
+
+  hitrateBoard: (windowDays = 28) =>
+    fetchAPI<HitrateBoard>(`/strategies/hitrate-board?window_days=${windowDays}`),
 
   get: (id: string) => fetchAPI<StrategyItem>(`/strategies/${encodeURIComponent(id)}`),
 

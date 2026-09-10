@@ -4,6 +4,7 @@
 
 ### feature
 
+- L1信号命中榜: `compute_hitrate_board`(策略×持有期, 到目标/正收益=中, 样本<10标不足/近4周<45%且n≥20标待砍, 半衰期看持有期衰减)+`GET /api/strategies/hitrate-board`(6h缓存)+机会页策略tab挂榜; 2例测试
 - P1缓存单飞: `BizCache.get_or_fetch`同key并发miss只放1个上游请求(leader抓/waiter等30s, 异常唤醒接替, 超时自抓保进度)；3例并发测试(10线程单次/异常无死锁/慢leader回退)
 - P2日快照入库: `market_snapshots`表(_m128+ORM, 唯一键kind+date+market)+`sync_market_snapshots`(幂等upsert, 单kind失败保旧行)+30分钟定时单写者+`GET /api/market/snapshots`(命中直返asof/source, miss走P1单飞回源不落库)+指数读取改快照优先；5例测试
 - P3口径徽标: 主线/阶段响应加`asof`(空数据给null)+前端`AsOfBadge`(截至日期/来源hover/无数据三态)接入两卡片；tsc+vite构建过

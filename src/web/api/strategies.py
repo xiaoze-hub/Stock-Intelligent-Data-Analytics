@@ -56,6 +56,31 @@ async def list_strategies():
     return {"items": items, "total": len(items)}
 
 
+@router.get("/hitrate-board")
+def get_hitrate_board(window_days: int = 28) -> dict:
+    """信号周滚动 HitRate 榜(L1): 按策略×持有期统计近 window_days 后验。
+
+    口径见 src/core/signal_hitrate.py(到目标价或持有期正收益=中)。
+    outcome 日级评估, 6h 缓存(P1 单飞, 多账号只算一次)。
+    """
+    from src.core.signal_hitrate import BOARD_CACHE_TTL_S, compute_hitrate_board
+    from src.web.cache.biz_cache import biz_cache
+    from src.web.database import SessionLocal
+
+    window_days = max(7, min(int(window_days or 28), 90))
+
+    def _build():
+        db = SessionLocal()
+        try:
+            return compute_hitrate_board(db, window_days=window_days)
+        finally:
+            db.close()
+
+    return biz_cache.get_or_fetch(
+        f"hitrate:board:{window_days}", ttl=BOARD_CACHE_TTL_S, fetch=_build
+    )
+
+
 @router.get("/{strategy_id}")
 async def get_strategy(strategy_id: str):
     """查看单个策略详情。"""

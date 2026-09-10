@@ -29,6 +29,7 @@ import FactorWeightsPanel from '@/components/FactorWeightsPanel'
 import SignalScoreShareCard from '@/components/SignalScoreShareCard'
 import WencaiPanel from '@panwatch/biz-ui/components/WencaiPanel'
 import AuctionAnomalyTab from '@panwatch/biz-ui/components/AuctionAnomalyTab'
+import StrategyHitrateBoard from '@panwatch/biz-ui/components/StrategyHitrateBoard'
 import AbnormalMovesCard from '@panwatch/biz-ui/components/AbnormalMovesCard'
 import StrategyLibraryDialog from '@/components/StrategyLibraryDialog'
 
@@ -1531,6 +1532,7 @@ export default function OpportunitiesPage() {
             )}
           </TabsContent>
           <TabsContent value="strategy">
+            <StrategyHitrateBoard />
             <div className="flex items-center gap-2 flex-wrap">
               <Select value={scanStrategyId} onValueChange={setScanStrategyId}>
                 <SelectTrigger className="h-8 text-[12px] w-[220px]">
