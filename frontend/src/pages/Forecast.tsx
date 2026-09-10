@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { TrendingUp, LineChart, RefreshCw, Activity, Download, History, FileText, Send } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { fetchAPI, getToken, stocksApi, type StockItem } from '@panwatch/api'
+import { REFRESH_TIERS } from '@/lib/refresh-tiers'
 import { Button } from '@panwatch/base-ui/components/ui/button'
 import { Input } from '@panwatch/base-ui/components/ui/input'
 import { Label } from '@panwatch/base-ui/components/ui/label'
@@ -346,7 +347,7 @@ export default function ForecastPage() {
     let cancelled = false
     const timer = setInterval(() => {
       if (!cancelled) checkEngine()
-    }, 30000)
+    }, REFRESH_TIERS.SLOW_MS)
     checkEngine()
     return () => {
       cancelled = true

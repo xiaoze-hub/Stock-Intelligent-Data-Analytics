@@ -45,6 +45,8 @@ interface QuoteResponse {
   pb_ratio?: number | null
   total_market_value?: number | null
   circulating_market_value?: number | null
+  /** 一眼表(借鉴 OpenTerminal Quote 面板): 行情来源露头 */
+  source?: string | null
 }
 
 interface MoreInfoResponse {
@@ -1876,6 +1878,11 @@ export default function StockInsightModal(props: {
                       <div className={`text-[16px] font-mono ${changeColor}`}>
                         {quote?.change_pct != null ? `${quote.change_pct >= 0 ? '+' : ''}${quote.change_pct.toFixed(2)}%` : '--'}
                       </div>
+                      {quote?.source ? (
+                        <div className="text-[10px] font-mono text-muted-foreground" title={`行情来源: ${quote.source}`}>
+                          来源 {quote.source}
+                        </div>
+                      ) : null}
                     </div>
                     <div className="mt-3 grid grid-cols-3 gap-2 text-[12px]">
                       <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">今开</div><div className={`font-mono ${levelColor(quote?.open_price)}`}>{formatNumber(quote?.open_price)}</div></div>
@@ -1889,6 +1896,10 @@ export default function StockInsightModal(props: {
                       <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">市盈率</div><div className="font-mono">{quote?.pe_ratio != null ? Number(quote.pe_ratio).toFixed(2) : '--'}</div></div>
                       <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">总市值</div><div className="font-mono">{formatMarketCap(quote?.total_market_value, market)}</div></div>
                       <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">流通市值</div><div className="font-mono">{formatMarketCap(quote?.circulating_market_value, market)}</div></div>
+                      <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground flex items-center">52周高<InfoTip k="high_52w_low_52w" /></div><div className="font-mono">{moreInfo?.high_52w != null ? formatNumber(moreInfo.high_52w) : '--'}</div></div>
+                      <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground flex items-center">52周低<InfoTip k="high_52w_low_52w" /></div><div className="font-mono">{moreInfo?.low_52w != null ? formatNumber(moreInfo.low_52w) : '--'}</div></div>
+                      <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground flex items-center">股息率<InfoTip k="dividend_yield" /></div><div className="font-mono">{moreInfo?.dividend_yield != null ? `${(Number(moreInfo.dividend_yield) * 100).toFixed(2)}%` : '--'}</div></div>
+                      <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground flex items-center">Beta<InfoTip k="beta" /></div><div className="font-mono">{moreInfo?.beta != null ? Number(moreInfo.beta).toFixed(2) : '--'}</div></div>
                     </div>
                     <div className="mt-3 border-t border-border/50 pt-3">
                       <div className="text-[11px] text-muted-foreground mb-2">持仓信息</div>

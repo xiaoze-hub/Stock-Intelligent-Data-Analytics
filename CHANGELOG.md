@@ -5,6 +5,7 @@
 ### feature
 
 - OT-Phase1价格闪动(借鉴OpenTerminal Flash): biz-ui新增`Flash`组件(useFlash+450ms)+持仓现价/涨跌幅+自选价格/涨跌四处接入；闪色用琥珀(适配深浅主题，不用原版纯白)
+- OT-R2一眼表+顶栏+档位+快捷键: 洞察弹窗补52周高低/股息率/Beta/来源徽标+顶栏`MarketStatusPill`(北京时间+A股状态点)+`refresh-tiers`四档收敛5处魔法数字+`mod+k`改走搜股面板(去占位)；#4后端排序与#5新闻切换经核验已存在，无需做
 - OT-Phase4数据源失败冷却+礼貌并发(借鉴OpenTerminal): engine vendor级失败冷却60s( key级限流切换不算本体故障)+每源2并发拿不到1s让路+成功清冷却；3例测试
 - OT-Phase5缓存stale回退: set_json留不过期快照(上限2000+delete/clear联动)+get_or_fetch回源失败有快照返旧值记warning(无快照照样抛)；AI工具链已逐分支+全局兜底(best-effort，无需改)；3例测试
 - OT-Phase2全局搜股+来源露头: `StockCommandPalette`(Cmd/Ctrl+K, Enter开洞察/Shift+Enter顺手加自选)+持仓页?symbol=直达+`QuoteResponse/source`批量透传(WS合并保留)+自选卡来源徽标

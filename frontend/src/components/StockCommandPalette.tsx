@@ -19,14 +19,9 @@ export default function StockCommandPalette() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault()
-        setOpen((v) => !v)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    const onOpen = () => setOpen((v) => !v)
+    window.addEventListener('sida:command-palette', onOpen)
+    return () => window.removeEventListener('sida:command-palette', onOpen)
   }, [])
 
   useEffect(() => {

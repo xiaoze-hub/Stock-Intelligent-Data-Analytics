@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { REFRESH_TIERS } from '@/lib/refresh-tiers'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 // 反AI模板 P2:精简图标导入 — 段落头去"每节一图标"惯性, 只保留要紧事/体检两个扫描区的图标
@@ -327,7 +328,7 @@ export default function DashboardPage() {
         autoRefreshBusy.current = false
       })
     }
-    const timer = setInterval(tick, 30_000)
+    const timer = setInterval(tick, REFRESH_TIERS.BOARD_MS)
     const onVisibility = () => {
       if (document.visibilityState === 'visible') tick()
     }
@@ -1127,7 +1128,7 @@ function PhaseGaugeCard() {
       } catch { /* 静默 */ }
     }
     void load()
-    const t = window.setInterval(() => void load(), 30000)
+    const t = window.setInterval(() => void load(), REFRESH_TIERS.BOARD_MS)
     return () => { alive = false; window.clearInterval(t) }
   }, [])
   return (

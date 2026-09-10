@@ -32,6 +32,7 @@ import NotificationBell from '@panwatch/biz-ui/components/notification-bell'
 import ChatWidget from '@/components/ChatWidget'
 import BrowserNotificationBridge from '@/components/BrowserNotificationBridge'
 import StockCommandPalette from '@/components/StockCommandPalette'
+import MarketStatusPill from '@/components/MarketStatusPill'
 import AccountMenu from '@/components/AccountMenu'
 import SelfCheckModal from '@/components/SelfCheckModal'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@panwatch/base-ui/components/ui/dialog'
@@ -237,16 +238,8 @@ function App() {
     {
       combo: 'mod+k',
       handler: runOnDesktop(() => {
-        // 优先聚焦搜索框;当前无全局搜索框,先打开日志弹窗 LogsModal 作为占位,后续接搜索
-        const searchInput = document.querySelector<HTMLInputElement>(
-          'input[type="search"], input[data-search-input], input[placeholder*="搜索" i]',
-        )
-        if (searchInput) {
-          searchInput.focus()
-          searchInput.scrollIntoView({ block: 'center', behavior: 'smooth' })
-          return
-        }
-        setLogsOpen(true)
+        // OT-Phase2: 全局搜股面板(替代旧占位：聚焦搜索框/开日志弹窗)
+        window.dispatchEvent(new Event('sida:command-palette'))
       }),
     },
     { combo: 'mod+,', handler: runOnDesktop(() => navigate('/settings')) },
@@ -333,6 +326,7 @@ function App() {
 
             {/* action wrapper:GitHub + 日志 + 头像(桌面端头像下拉仅含主题/自检/退出, 导航已平铺) */}
             <div className="flex items-center gap-1.5 px-1.5 py-1 rounded-2xl bg-accent/20 border border-border/40 shrink-0">
+              <MarketStatusPill />
               <button
                 onClick={() => window.open(repoUrl, '_blank', 'noopener,noreferrer')}
                 className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background/70 transition-colors"

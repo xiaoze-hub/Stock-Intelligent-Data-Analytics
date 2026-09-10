@@ -17,6 +17,7 @@ import {
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { fetchAPI } from '@panwatch/api'
+import { REFRESH_TIERS } from '@/lib/refresh-tiers'
 import { Button } from '@panwatch/base-ui/components/ui/button'
 import SkeletonRows from '@/components/SkeletonRows'
 import { parseServerTime } from '@/lib/utils'
@@ -208,7 +209,7 @@ export default function NotificationsPage() {
         autoRefreshBusy.current = false
       })
     }
-    const timer = setInterval(tick, 30_000)
+    const timer = setInterval(tick, REFRESH_TIERS.BOARD_MS)
     const onVisibility = () => {
       if (document.visibilityState === 'visible') tick()
     }
