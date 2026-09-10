@@ -81,6 +81,32 @@ def get_hitrate_board(window_days: int = 28) -> dict:
     )
 
 
+@router.get("/regime-matrix")
+def get_regime_matrix(window_days: int = 90) -> dict:
+    """市况×信号矩阵(L3): 哪类信号在什么市况下赚钱。
+
+    市况=情绪周期阶段(信号发出日), 口径与命中榜一致。6h 缓存。
+    本期只展示, 调权联动等矩阵养厚后再定。
+    """
+    from src.core.regime_signal_matrix import BOARD_CACHE_TTL_S as MATRIX_TTL
+    from src.core.regime_signal_matrix import compute_regime_matrix
+    from src.web.cache.biz_cache import biz_cache
+    from src.web.database import SessionLocal
+
+    window_days = max(30, min(int(window_days or 90), 365))
+
+    def _build():
+        db = SessionLocal()
+        try:
+            return compute_regime_matrix(db, window_days=window_days)
+        finally:
+            db.close()
+
+    return biz_cache.get_or_fetch(
+        f"regime:matrix:{window_days}", ttl=MATRIX_TTL, fetch=_build
+    )
+
+
 @router.get("/{strategy_id}")
 async def get_strategy(strategy_id: str):
     """查看单个策略详情。"""

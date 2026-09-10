@@ -94,11 +94,34 @@ export interface HitrateBoard {
   rows: HitrateRow[]
 }
 
+/** L3 市况×信号矩阵(2026-09-10): GET /api/strategies/regime-matrix */
+export interface RegimeCell {
+  phase: string
+  strategy_code: string
+  n: number
+  hits: number
+  hit_rate: number
+  avg_ret: number | null
+  status: string
+}
+
+export interface RegimeMatrix {
+  asof: string
+  window_days: number
+  current_phase: string | null
+  hit_def: string
+  cells: RegimeCell[]
+  best: Record<string, { strategy_code: string; hit_rate: number; n: number }>
+}
+
 export const strategiesApi = {
   list: () => fetchAPI<StrategyListResponse>(`/strategies/list`),
 
   hitrateBoard: (windowDays = 28) =>
     fetchAPI<HitrateBoard>(`/strategies/hitrate-board?window_days=${windowDays}`),
+
+  regimeMatrix: (windowDays = 90) =>
+    fetchAPI<RegimeMatrix>(`/strategies/regime-matrix?window_days=${windowDays}`),
 
   get: (id: string) => fetchAPI<StrategyItem>(`/strategies/${encodeURIComponent(id)}`),
 
