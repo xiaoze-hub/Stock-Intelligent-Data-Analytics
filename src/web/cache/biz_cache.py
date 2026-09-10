@@ -44,6 +44,10 @@ _REDIS_OP_TIMEOUT = 1.5
 _KEY_PREFIX = "biz:"
 
 
+# 单飞去重: 同 key 并发 miss 只放 1 个上游请求, waiter 最长等待(秒)
+_SINGLEFLIGHT_WAIT_S = 30.0
+
+
 class BizCache:
     """L1 内存 + L2 Redis 两级缓存(同步接口)。"""
 
@@ -52,6 +56,7 @@ class BizCache:
     def __init__(self) -> None:
         self._l1: dict[str, tuple[float, Any]] = {}  # key -> (expires_at, value)
         self._lock = threading.Lock()
+        self._inflight: dict[str, threading.Event] = {}  # singleflight: key -> 完成事件
         self._redis: Any = None
         self._redis_attempted = False
         self._redis_next_attempt = 0.0
@@ -164,13 +169,43 @@ class BizCache:
 
         注意: fetch 必须是同步可调用(在 to_thread / 同步上下文跑)。
         fetch 抛异常直接向上抛(调用方自己决定 fallback 策略)。
+
+        单飞去重(P1): 同 key 并发 miss 只有 leader 调 fetch, waiter 等待
+        事件后重读缓存; leader 超时未回填 waiter 自己抓一次(极端边沿,
+        保证进度, 不死锁)。
         """
         cached = self.get_json(key)
         if cached is not None:
             return cached
-        value = fetch()
+        with self._lock:
+            ev = self._inflight.get(key)
+            if ev is None:
+                ev = threading.Event()
+                self._inflight[key] = ev
+                leader = True
+            else:
+                leader = False
+        if not leader:
+            ev.wait(timeout=_SINGLEFLIGHT_WAIT_S)
+            cached = self.get_json(key)
+            if cached is not None:
+                return cached
+            value = fetch()
+            if value is not None:
+                self.set_json(key, value, ttl=ttl)
+            return value
+        try:
+            value = fetch()
+        except Exception:
+            with self._lock:
+                self._inflight.pop(key, None)
+            ev.set()
+            raise
+        with self._lock:
+            self._inflight.pop(key, None)
         if value is not None:
             self.set_json(key, value, ttl=ttl)
+        ev.set()
         return value
 
     def delete(self, *keys: str) -> int:

@@ -2,6 +2,10 @@
 
 ## 2026-09-10
 
+### feature
+
+- P1缓存单飞: `BizCache.get_or_fetch`同key并发miss只放1个上游请求(leader抓/waiter等30s, 异常唤醒接替, 超时自抓保进度)；3例并发测试(10线程单次/异常无死锁/慢leader回退)
+
 ### fix
 
 - M3批量污染根因: `test_thsdk_api`裸`sys.modules.setdefault`永久污染→换monkeypatch.setitem(4处)；`test_security`同样收敛；`test_thsdk_extended`路由断言兼容FastAPI嵌套`_IncludedRouter`(经`include_context.prefix`展平)。排除集17文件合跑197过/1跳；CI排除保留(海外机房无国内网源)
