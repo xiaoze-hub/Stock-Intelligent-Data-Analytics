@@ -5,7 +5,7 @@
 **Open-source AI investment terminal for China A-shares** — market data → multi-agent AI analysis → foundation-model prediction → self-verification loop → WeChat push, all in one self-hosted system.
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
-![Version](https://img.shields.io/badge/version-v0.4.36-green)
+![Version](https://img.shields.io/badge/version-v0.4.37-green)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue?logo=docker)](https://github.com/xiaoze-hub/Stock-Intelligent-Data-Analytics/pkgs/container/stock-intelligent-data-analytics)
 
 *Language: [English](README.md) · [中文](README.zh-CN.md)*
@@ -69,7 +69,7 @@ SIDA doesn't reinvent wheels — it integrates proven open-source projects into 
 ```bash
 # GitHub Container Registry (global) or Aliyun ACR (fast in China)
 docker pull ghcr.io/xiaoze-hub/stock-intelligent-data-analytics:latest
-# or: docker pull crpi-mte80ai8o78b1429.cn-shanghai.personal.cr.aliyuncs.com/xiaozexwz/xzxwz:v0.4.36
+# or: docker pull crpi-mte80ai8o78b1429.cn-shanghai.personal.cr.aliyuncs.com/xiaozexwz/xzxwz:v0.4.37
 
 docker run -d --name sida -p 8000:8000 --restart unless-stopped \
   -v sida_data:/app/data \
@@ -136,7 +136,7 @@ cd frontend && pnpm install && pnpm dev
 Tencent / Eastmoney / THS / Sina / TDX (问小达) / Cninfo (互动易) — quotes, K-lines, minute data, capital flow, tick-level trades, auctions, limit-up pools, hot boards, dragon-tiger lists, margin trading and more. Free sources, no paid keys required.
 
 - Every quote carries its winning `source` (e.g. `tencent`), so the UI can label data provenance instead of guessing.
-- 通达信TQ client gateway is **off by default** since v0.4.36 (needs a local client + gateway). Enable with `PANWATCH_ENABLE_TQ=1` plus manual enable on the Data Sources page; quotes/K-lines then fall back to Tencent/Eastmoney automatically.
+- 通达信TQ client gateway is **off by default** since v0.4.37 (needs a local client + gateway). Enable with `PANWATCH_ENABLE_TQ=1` plus manual enable on the Data Sources page; quotes/K-lines then fall back to Tencent/Eastmoney automatically.
 
 ## Disclaimer
 
