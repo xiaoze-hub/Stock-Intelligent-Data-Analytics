@@ -207,3 +207,13 @@
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* Phase 1: 行情值变闪动(借鉴 OpenTerminal .flash-white) */
+.sida-flash {
+  border-radius: 2px;
+  animation: sida-flash-anim 450ms ease-out;
+}
+@keyframes sida-flash-anim {
+  0% { background-color: rgba(250, 204, 21, 0.45); }
+  100% { background-color: transparent; }
+}

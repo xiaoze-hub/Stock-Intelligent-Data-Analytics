@@ -4,6 +4,7 @@
 
 ### feature
 
+- OT-Phase1价格闪动(借鉴OpenTerminal Flash): biz-ui新增`Flash`组件(useFlash+450ms)+持仓现价/涨跌幅+自选价格/涨跌四处接入；闪色用琥珀(适配深浅主题，不用原版纯白)
 - L1信号命中榜: `compute_hitrate_board`(策略×持有期, 到目标/正收益=中, 样本<10标不足/近4周<45%且n≥20标待砍, 半衰期看持有期衰减)+`GET /api/strategies/hitrate-board`(6h缓存)+机会页策略tab挂榜; 2例测试
 - L2双源分歧度: `compute_uncertainty`(L2明盘vs逐笔主力净额, 元口径; 缺失未知/双尘埃低/同向量级比/反向最高)+`fetch_decision_pioneer`透传`uncertainty`+文本摘要+先锋卡分歧徽标(本期只记录展示, 不阻断); 5例测试
 - L3市况信号矩阵: `compute_regime_matrix`(市况=信号日情绪阶段, 口径与L1一致, 无标签日丢弃)+`GET /api/strategies/regime-matrix`(6h缓存)+机会页策略tab挂矩阵(含当前市况最优); 2例测试

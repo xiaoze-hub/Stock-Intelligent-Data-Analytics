@@ -7,6 +7,7 @@ import { SuggestionBadge, type SuggestionInfo, type KlineSummary } from '@panwat
 import { buildKlineSuggestion } from '@/lib/kline-scorer'
 import { KlineSummaryDialog } from '@panwatch/biz-ui/components/kline-summary-dialog'
 import { MinuteDialog } from '@panwatch/biz-ui/components/minute-dialog'
+import Flash from '@panwatch/biz-ui/components/Flash'
 import { Button } from '@panwatch/base-ui/components/ui/button'
 import { Input } from '@panwatch/base-ui/components/ui/input'
 import { Label } from '@panwatch/base-ui/components/ui/label'
@@ -1866,10 +1867,10 @@ export default function StocksPage() {
                                     })()}
                                   </td>
                                   <td className={`px-4 py-2.5 text-right font-mono tabular-nums text-[12px] ${changeColor}`}>
-                                    {pos.current_price != null && Number.isFinite(Number(pos.current_price)) ? <span>{Number(pos.current_price).toFixed(2)}{isForeign ? (pos.market === 'HK' ? ' HKD' : ' USD') : ''}</span> : '—'}
+                                    {pos.current_price != null && Number.isFinite(Number(pos.current_price)) ? <Flash value={Number(pos.current_price)}><span>{Number(pos.current_price).toFixed(2)}{isForeign ? (pos.market === 'HK' ? ' HKD' : ' USD') : ''}</span></Flash> : '—'}
                                   </td>
                                   <td className={`px-4 py-2.5 text-right font-mono tabular-nums text-[12px] ${changeColor}`}>
-                                    {pos.change_pct != null && Number.isFinite(Number(pos.change_pct)) ? `${pos.change_pct >= 0 ? '+' : ''}${Number(pos.change_pct).toFixed(2)}%` : '—'}
+                                    {pos.change_pct != null && Number.isFinite(Number(pos.change_pct)) ? <Flash value={Number(pos.change_pct)}>{`${pos.change_pct >= 0 ? '+' : ''}${Number(pos.change_pct).toFixed(2)}%`}</Flash> : '—'}
                                   </td>
                                   <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[12px] text-muted-foreground">{formatPrice(pos.cost_price)}</td>
                                   <td className="px-4 py-2.5 text-right font-mono tabular-nums text-[12px] text-muted-foreground">{pos.quantity}</td>
@@ -2276,10 +2277,14 @@ export default function StocksPage() {
                       </div>
                       <div className="text-right shrink-0 whitespace-nowrap">
                         <div className={`font-mono text-[14px] font-bold leading-tight tabular-nums ${changeColor}`}>
+                          <Flash value={quote?.current_price != null ? Number(quote.current_price) : null}>
                           {quote?.current_price != null && Number.isFinite(Number(quote.current_price)) ? Number(quote.current_price).toFixed(2) : '--'}
+                          </Flash>
                         </div>
                         <div className={`font-mono text-[11px] leading-tight tabular-nums ${changeColor}`}>
+                          <Flash value={quote?.change_pct != null ? Number(quote.change_pct) : null}>
                           {quote?.change_pct != null && Number.isFinite(Number(quote.change_pct)) ? `${quote.change_pct >= 0 ? '+' : ''}${Number(quote.change_pct).toFixed(2)}%` : '--'}
+                          </Flash>
                         </div>
                       </div>
                     </div>
