@@ -2172,6 +2172,38 @@ CREATE TABLE IF NOT EXISTS corporate_actions (
     )
 
 
+def _m128_market_snapshots_table(conn: Connection) -> None:
+    """P2: 日级共享快照表(涨停池/板块轮动/指数快照), 双方言兼容。"""
+    id_col = "SERIAL PRIMARY KEY" if _dialect_is_pg(conn) else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    conn.execute(
+        text(
+            f"""
+CREATE TABLE IF NOT EXISTS market_snapshots (
+  id {id_col},
+  kind TEXT NOT NULL,
+  snapshot_date TEXT NOT NULL,
+  market TEXT NOT NULL DEFAULT 'CN',
+  payload TEXT NOT NULL DEFAULT '[]',
+  source TEXT NOT NULL DEFAULT '',
+  fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+"""
+        )
+    )
+    conn.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_market_snapshot_kind_day "
+            "ON market_snapshots(kind, snapshot_date, market)"
+        )
+    )
+    conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_market_snapshot_kind_day "
+            "ON market_snapshots(kind, snapshot_date)"
+        )
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(101, "agent_config_kind_and_visibility", _m101_agent_config_kind),
     Migration(102, "backfill_agent_kind_data", _m102_backfill_agent_kind),
@@ -2208,6 +2240,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(125, "klines_table", _m125_klines_table),
     Migration(126, "disable_tq_default_off", _m126_disable_tq_default_off),
     Migration(127, "corporate_actions_table", _m127_corporate_actions_table),
+    Migration(128, "market_snapshots_table", _m128_market_snapshots_table),
 )
 
 

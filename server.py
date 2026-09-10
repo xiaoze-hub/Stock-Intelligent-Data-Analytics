@@ -30,6 +30,7 @@ from src.core.paper_trading_scheduler import PaperTradingScheduler
 from src.core.context_scheduler import ContextMaintenanceScheduler
 from src.core.report_scheduler import ReportScheduler
 from src.core.kline_backfill_scheduler import KlineBackfillScheduler
+from src.core.market_snapshot_scheduler import MarketSnapshotScheduler
 from src.core.agent_runs import record_agent_run
 from src.core.log_context import install_log_record_factory, log_context
 from src.core.agent_catalog import (
@@ -57,6 +58,7 @@ paper_trading_scheduler: PaperTradingScheduler | None = None
 context_maintenance_scheduler: ContextMaintenanceScheduler | None = None
 report_scheduler: ReportScheduler | None = None
 kline_backfill_scheduler: KlineBackfillScheduler | None = None
+market_snapshot_scheduler: MarketSnapshotScheduler | None = None
 
 # 2026-08-17 加股 60s 快速 backfill:
 # APScheduler 跑在它自己的后台线程(没 asyncio loop),
@@ -1800,7 +1802,7 @@ async def lifespan(app):
     if not _leader_ok:
         logger.info("[选主] 本 worker 不启动调度器/微信BOT: %s", _leader_why)
     if _leader_ok:
-        global scheduler, price_alert_scheduler, paper_trading_scheduler, context_maintenance_scheduler, kline_backfill_scheduler, _kline_oneoff_loop
+        global scheduler, price_alert_scheduler, paper_trading_scheduler, context_maintenance_scheduler, kline_backfill_scheduler, market_snapshot_scheduler, _kline_oneoff_loop
         _kline_oneoff_loop = asyncio.get_running_loop()  # 跨线程调度用
         scheduler = build_scheduler()
         scheduler.start()
@@ -1887,6 +1889,15 @@ async def lifespan(app):
             kline_backfill_scheduler.start()
         except Exception as e:
             logger.error(f"K线入库调度器启动失败: {e}")
+        # 日快照定时单写者(P2): 盘中每 30 分钟刷涨停池/板块轮动/指数快照入库
+        try:
+            settings = Settings()
+            market_snapshot_scheduler = MarketSnapshotScheduler(
+                timezone=settings.app_timezone
+            )
+            market_snapshot_scheduler.start()
+        except Exception as e:
+            logger.error(f"日快照调度器启动失败: {e}")
 
         # 微信数智分析BOT worker: 长轮询 getupdates, 微信消息 → AI 回复 → 回微信
         try:

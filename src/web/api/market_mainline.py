@@ -20,7 +20,7 @@ import threading
 import time
 from datetime import date
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import text
 
 from src.core.market_mainline import aggregate_mainline
@@ -266,3 +266,54 @@ def clear_market_mainline_cache() -> None:
     """
     with _cache_lock:
         _cache.clear()
+
+
+@router.post("/snapshots/sync")
+def sync_snapshots(date_str: str | None = None) -> dict:
+    """单写者触发(P2): 定时任务/cron 调, 全 kind 抓取 upsert 当日快照。
+
+    用户读链路不调这个(读走 GET /snapshots)。单 kind 失败保留旧行。
+    """
+    from src.core.market_snapshots import sync_market_snapshots
+    from src.web.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        day = date_str or date.today().isoformat()
+        return {"asof": day, "result": sync_market_snapshots(db, snapshot_date=date_str)}
+    finally:
+        db.close()
+
+
+@router.get("/snapshots")
+def get_snapshot(kind: str, date_str: str | None = None) -> dict:
+    """读快照(P2): 有行直返(含 asof/source/fetched_at)。
+
+    miss 则 P1 单飞回源(120s 缓存, 不落库): 同一时刻多账号只打 1 次上游。
+    kind: limit_up_pool/sector_rotation/index_snapshot。
+    """
+    from src.core.market_snapshots import KINDS, _fetch_kind, read_snapshot
+
+    if kind not in KINDS:
+        raise HTTPException(400, f"未知 kind: {kind}, 可选 {list(KINDS)}")
+    from src.web.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        row = read_snapshot(db, kind, date_str)
+    finally:
+        db.close()
+    if row is not None:
+        return row
+    day = date_str or date.today().isoformat()
+    from src.web.cache.biz_cache import biz_cache
+
+    payload, source = biz_cache.get_or_fetch(
+        f"snap:live:{kind}:{day}",
+        ttl=120,
+        fetch=lambda: _fetch_kind(kind, day.replace("-", "")),
+    )
+    return {
+        "kind": kind, "asof": day, "source": source or "",
+        "fetched_at": "", "payload": payload, "live": True,
+    }

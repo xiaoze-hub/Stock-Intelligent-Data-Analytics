@@ -53,10 +53,37 @@ def _sh_index_pct_today() -> float | None:
     """拉今日上证指数涨跌幅(%), 数据源不可用时 None。
 
     优先级: 名称含"上证/沪指"; 兜底取接口返回的第一个(腾讯接口固定 sh/sz/cyb 顺序)。
+
+    P2: 先读当日 index_snapshot 行(定时单写者刷), miss 才 P1 单飞回源。
     """
+    idx: list = []
     try:
-        col = MarketSentimentCollector()
-        idx = col.get_index_snapshot() or []
+        from src.web.database import SessionLocal
+        from src.core.market_snapshots import read_snapshot
+
+        db = SessionLocal()
+        try:
+            snap = read_snapshot(db, "index_snapshot")
+        finally:
+            db.close()
+        idx = (snap or {}).get("payload") or []
+    except Exception as e:  # noqa: BLE001
+        logger.debug("market_phase: 快照读指数失败(回源): %s", e)
+    if not idx:
+        try:
+            from src.web.cache.biz_cache import biz_cache
+            from src.core.market_snapshots import _fetch_kind
+
+            payload, _ = biz_cache.get_or_fetch(
+                "snap:live:index_snapshot:today",
+                ttl=120,
+                fetch=lambda: _fetch_kind("index_snapshot", ""),
+            )
+            idx = payload or []
+        except Exception as e:  # noqa: BLE001
+            logger.debug("market_phase: 指数回源失败: %s", e)
+            return None
+    try:
         for x in idx:
             name = (x.get("name") or "").strip()
             if any(k in name for k in ("上证", "沪指", "上证综指")):

@@ -393,6 +393,31 @@ class CorporateAction(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class MarketSnapshot(Base):
+    """日级共享快照(P2)。涨停池/板块轮动/指数快照单写者定时刷, 全员读库。
+
+    kind: limit_up_pool/sector_rotation/index_snapshot;
+    snapshot_date: YYYY-MM-DD; payload: JSON 串(TEXT, 双方言兼容)。
+    """
+
+    __tablename__ = "market_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "kind", "snapshot_date", "market",
+            name="uq_market_snapshot_kind_day",
+        ),
+        Index("ix_market_snapshot_kind_day", "kind", "snapshot_date"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    kind = Column(String, nullable=False)
+    snapshot_date = Column(String, nullable=False)  # YYYY-MM-DD
+    market = Column(String, nullable=False, default="CN")
+    payload = Column(Text, nullable=False, default="[]")
+    source = Column(String, nullable=False, default="")
+    fetched_at = Column(DateTime, server_default=func.now())
+
+
 class NewsCache(Base):
     """新闻缓存（用于去重）"""
 
