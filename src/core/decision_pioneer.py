@@ -324,13 +324,26 @@ def fetch_decision_pioneer(symbol: str, market: str = "CN") -> dict:
     except Exception as e:  # noqa: BLE001
         logger.warning("decision_pioneer main_intent %s failed: %s", symbol, e)
 
+    # L2 数据不确定性(双源分歧度): 只记录 + 展示, 不阻断(阈值等数据积累后定)
+    l2s = _l2_summary(l2)
+    uncertainty = None
+    try:
+        from src.core.data_uncertainty import compute_uncertainty
+
+        uncertainty = compute_uncertainty(
+            l2s.get("zjl_hb"), (main_intent or {}).get("main_net")
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.debug("decision_pioneer uncertainty %s failed: %s", symbol, e)
+
     return {
         "symbol": symbol,
         "market": market,
         "institution_activity": act,
         "gs": gs,
-        "l2": _l2_summary(l2),
+        "l2": l2s,
         "main_intent": main_intent,
+        "uncertainty": uncertainty,
         "data_time": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(timespec="seconds"),
     }
 
@@ -370,5 +383,11 @@ def decision_pioneer_text(symbol: str, market: str = "CN") -> str:
         parts.append(f"主力意图(逐笔): 主力净额{mn / 1e4:+.0f}万")
     elif mi:
         parts.append("主力意图(逐笔): 数据不足")
+
+    unc = d.get("uncertainty") or {}
+    if unc.get("score") is not None:
+        parts.append(f"数据不确定性: {unc.get('level')}(分歧{unc['score']:.2f})")
+    elif unc:
+        parts.append("数据不确定性: 未知(双源缺一)")
 
     return " | ".join(parts)

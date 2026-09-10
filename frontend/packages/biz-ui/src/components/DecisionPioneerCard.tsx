@@ -40,6 +40,8 @@ export interface DecisionPioneerResp {
   institution_activity: InstitutionActivity | null
   gs: GsSignal | null
   l2: L2Flow | null
+  /** L2 双源分歧度(2026-09-10): 分歧大=降置信, 本期只展示不阻断 */
+  uncertainty?: { score: number | null; level: string; agree: boolean | null; detail: string } | null
   data_time?: string
 }
 
@@ -112,6 +114,15 @@ export default function DecisionPioneerCard({ symbol, market }: { symbol: string
   const act = data?.institution_activity ?? null
   const gs = data?.gs ?? null
   const l2 = data?.l2 ?? null
+  const unc = data?.uncertainty ?? null
+  const uncClass =
+    !unc || unc.score == null
+      ? 'text-muted-foreground'
+      : unc.level === '高'
+        ? 'text-rose-500 font-semibold'
+        : unc.level === '中'
+          ? 'text-amber-500'
+          : 'text-muted-foreground'
 
   return (
     <div className="mt-3 rounded-xl border border-border/50 bg-card p-3">
@@ -119,6 +130,11 @@ export default function DecisionPioneerCard({ symbol, market }: { symbol: string
         <div className="flex items-center gap-2">
           <div className="text-[13px] font-semibold text-foreground">🧭 决策先锋三指标</div>
           <span className="text-[10px] text-muted-foreground">GS趋势 × 机构活跃度 × L2资金</span>
+          {unc && (
+            <span className={`text-[10px] font-mono ${uncClass}`} title={unc.detail || '双源分歧度'}>
+              分歧{unc.score == null ? '未知' : unc.score.toFixed(2)}
+            </span>
+          )}
         </div>
         <button
           type="button"
