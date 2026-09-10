@@ -224,6 +224,8 @@ def _fetch_mainline() -> dict:
     # 增加一个 cache_ts(给前端读"最近一次拉取时间")
     result = dict(result)
     result["cache_ts"] = time.time()
+    # P3: 计算口径日期(当日榜), 前端徽标显"截至 asof", 不再只显拉取时间
+    result["asof"] = date.today().isoformat()
     # v0.4.7: 排名变动(对比昨日快照, 失败静默)
     try:
         ranked = result.get("ranked_groups") or []

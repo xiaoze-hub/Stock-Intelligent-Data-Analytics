@@ -394,3 +394,18 @@ def test_realistic_scenario():
     assert r["filter_stats"]["broad_filtered"] == 2
     assert r["filter_stats"]["below_min"] == 1
     assert r["filter_stats"]["ranked"] == 3
+
+
+# ──────────── P3: 口径日期 ────────────
+def test_fetch_mainline_has_asof(monkeypatch):
+    """_fetch_mainline 带当日 asof(空池也带, 前端徽标不编数)。"""
+    from datetime import date as _date
+
+    from src.web.api import market_mainline as mml
+
+    monkeypatch.setattr(
+        "src.collectors.market_sentiment_collector.MarketSentimentCollector.get_limit_up_pool",
+        lambda self, date=None: [],
+    )
+    out = mml._fetch_mainline()
+    assert out["asof"] == _date.today().isoformat()

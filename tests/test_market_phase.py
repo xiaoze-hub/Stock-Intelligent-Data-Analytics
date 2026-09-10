@@ -542,6 +542,7 @@ class TestMarketPhaseApi:
 
         resp = api.get_phase()
         assert resp["available"] is False
+        assert resp["asof"] is None
         assert resp["current"] is None
         assert resp["recent_30d"] == []
         assert "POST /api/market/phase/sync" in resp["note"]
@@ -631,5 +632,10 @@ class TestMarketPhaseApi:
                 "5 天数据已够 ACCUMULATING_MIN_DAYS, 不应还是 accumulating"
             )
             assert resp["phase"] == today_row.phase
+            # P3: 口径日期 = 最后一条日记录(当日)
+            bc.biz_cache.clear()
+            phase_resp = api.get_phase()
+            assert phase_resp["available"] is True
+            assert phase_resp["asof"] == _date.today().isoformat()
         finally:
             db.close()

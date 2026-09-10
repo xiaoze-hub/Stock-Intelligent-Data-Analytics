@@ -141,6 +141,7 @@ def get_phase() -> dict:
         if not rows:
             payload = {
                 "available": False,
+                "asof": None,
                 "current": None,
                 "recent_30d": [],
                 "distribution": [],
@@ -158,6 +159,8 @@ def get_phase() -> dict:
 
         payload = {
             "available": True,
+            # P3: 数据口径日期(最后一条日记录), 前端徽标显"截至 asof"
+            "asof": cur.date.isoformat() if hasattr(cur.date, "isoformat") else str(cur.date),
             "current": _row_to_dict(cur),
             "recent_30d": [_row_to_dict(r) for r in recent],
             "recent_days": [_row_to_dict(r) for r in recent],

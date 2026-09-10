@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity, RefreshCw, ShieldAlert, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { fetchAPI } from '@panwatch/api'
+import AsOfBadge from './AsOfBadge'
 
 /**
  * 市场情绪周期 6 阶段卡(2026-08-24, 任务 A)。
@@ -42,6 +43,8 @@ export interface MarketPhaseDistributionItem {
 
 export interface MarketPhaseResp {
   available: boolean
+  /** P3: 数据口径日期(最后一条日记录 YYYY-MM-DD), 无数据时 null */
+  asof?: string | null
   current: MarketPhaseDay | null
   recent_30d: MarketPhaseDay[]
   distribution: MarketPhaseDistributionItem[]
@@ -202,6 +205,7 @@ export default function MarketPhaseCard() {
         <div className="flex items-center gap-2">
           <Activity className="w-3.5 h-3.5 text-muted-foreground" />
           <span className="text-[13px] font-semibold text-foreground">情绪周期阶段</span>
+          <AsOfBadge asof={data?.asof} />
           {updatedAt && (
             <span className="text-[10px] text-muted-foreground font-mono">
               {updatedAt.toLocaleTimeString('zh-CN', { hour12: false })}

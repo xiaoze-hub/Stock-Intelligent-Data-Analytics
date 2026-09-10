@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RefreshCw, AlertTriangle, ChevronDown, ChevronRight, Layers, Crown } from 'lucide-react'
 import { fetchAPI } from '@panwatch/api'
+import AsOfBadge from './AsOfBadge'
 
 /**
  * 市场主线识别卡片 (2026-08-24, v0.3.0)
@@ -55,6 +56,8 @@ export interface MainlineResp {
   filter_stats?: MainlineFilterStats
   note?: string
   cache_ts?: number
+  /** P3: 计算口径日期(当日榜 YYYY-MM-DD) */
+  asof?: string | null
 }
 
 /** 元 → 亿/万 紧凑显示(带符号), NaN → '--' */
@@ -271,6 +274,7 @@ export default function MarketMainlineCard() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <AsOfBadge asof={data?.asof} />
           {updatedAt && (
             <span className="text-[10px] text-muted-foreground font-mono">
               {updatedAt.toLocaleTimeString('zh-CN', { hour12: false })}
