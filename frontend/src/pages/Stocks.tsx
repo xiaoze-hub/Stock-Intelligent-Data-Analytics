@@ -360,6 +360,7 @@ export default function StocksPage() {
           quote_time: item.quote_time ?? null,
           quote_date: item.quote_date ?? null,
           daily_pnl_period: item.daily_pnl_period ?? 'unknown',
+          source: item.source ?? null,
         }
       }
       setQuotes(map)
@@ -414,6 +415,7 @@ export default function StocksPage() {
                 quote_time: null,
                 quote_date: null,
                 daily_pnl_period: prev[`${item.market}:${item.symbol}`]?.daily_pnl_period ?? 'unknown',
+                source: prev[`${item.market}:${item.symbol}`]?.source ?? null,
               }
             }
             return next
@@ -610,6 +612,17 @@ export default function StocksPage() {
   }, [refreshQuotes, loadPoolSuggestions, refreshKlines])
 
   useEffect(() => { load(); loadPortfolio(); loadPoolSuggestions(); loadPriceAlertSummaries(); refreshKlines() }, [])
+
+  // OT-Phase2: 全局搜股面板跳入 ?symbol=&market= 直接打开洞察
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search)
+    const sym = (sp.get('symbol') || '').trim()
+    if (!sym) return
+    const mkt = (sp.get('market') || 'CN').trim() || 'CN'
+    window.history.replaceState(null, '', window.location.pathname)
+    openStockDetail(sym, mkt, sym, false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 仅关注列表场景（无持仓）也要在列表加载后预取 K 线摘要，保证技术指标徽章可见
   const watchlistKlineInitDone = useRef(false)
@@ -2261,6 +2274,11 @@ export default function StocksPage() {
                           <span className={`text-[9px] px-1 py-0.5 rounded ${marketBadge(stock.market).style}`}>
                             {marketBadge(stock.market).label}
                           </span>
+                          {quote?.source ? (
+                            <span className="text-[9px] px-1 py-0.5 rounded bg-accent/40 text-muted-foreground font-mono" title={`行情来源: ${quote.source}`}>
+                              {quote.source}
+                            </span>
+                          ) : null}
                           <button
                             className="font-mono text-[12px] font-semibold text-foreground hover:text-primary"
                             onClick={(e) => { e.stopPropagation(); openStockDetail(stock.symbol, stock.market, stock.name, false) }}

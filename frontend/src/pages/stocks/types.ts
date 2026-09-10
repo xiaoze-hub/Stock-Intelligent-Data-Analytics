@@ -73,6 +73,8 @@ export interface QuoteSnapshot {
   quote_time: string | null
   quote_date: string | null
   daily_pnl_period: DailyPnlPeriod
+  /** OT-Phase2: 行情来源(批量接口透传, WS 合并时保留旧值) */
+  source?: string | null
 }
 
 export interface AccountSummary {
@@ -146,6 +148,8 @@ export interface QuoteResponse {
   quote_time: string | null
   quote_date: string | null
   daily_pnl_period: DailyPnlPeriod
+  /** OT-Phase2: 行情来源露头(后端 _quote_to_response.source) */
+  source?: string | null
 }
 
 export interface StockForm {

@@ -31,6 +31,7 @@ import AmbientBackground from '@panwatch/biz-ui/components/AmbientBackground'
 import NotificationBell from '@panwatch/biz-ui/components/notification-bell'
 import ChatWidget from '@/components/ChatWidget'
 import BrowserNotificationBridge from '@/components/BrowserNotificationBridge'
+import StockCommandPalette from '@/components/StockCommandPalette'
 import AccountMenu from '@/components/AccountMenu'
 import SelfCheckModal from '@/components/SelfCheckModal'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@panwatch/base-ui/components/ui/dialog'
@@ -397,6 +398,8 @@ function App() {
         </header>
       </div>
 
+      {/* 全局搜股面板(OT-Phase2): Cmd/Ctrl+K 唤起 */}
+      <StockCommandPalette />
       {/* Mobile Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-card border-t border-border px-2 pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-center justify-around h-14">
